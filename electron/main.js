@@ -1,5 +1,9 @@
-const { app, BrowserWindow } = require('electron')
-const path = require('path')
+import { app, BrowserWindow } from 'electron'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const isDev = process.env.NODE_ENV === 'development'
 
