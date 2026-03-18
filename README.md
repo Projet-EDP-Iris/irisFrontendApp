@@ -1,70 +1,176 @@
 # Iris - AI Email & Calendar App
 
-Iris is an AI-powered app that extracts important appointment emails and adds them to your calendar automatically.
+Iris is an AI-powered desktop app that extracts important appointment emails and adds them to your calendar automatically.
 
-## Getting Started
+---
+
+## English
+
+### Requirements
+
+- [Node.js](https://nodejs.org/) v20+
+- npm
+
+### Install & Run
 
 ```bash
 # 1. Clone the repo
 git clone https://github.com/Jerobel05/iris-app
 cd iris-app
 
-# 2. Install dependencies (remove any previous install first)
-rm -rf node_modules package-lock.json
+# 2. Install dependencies
 npm install
 
-# 3. Start the dev server
+# 3a. Run in the browser (web dev mode)
 npm run dev
+# → Opens at http://localhost:5173
+
+# 3b. Run as a desktop app (Electron)
+npm run electron:dev
+# → Opens a native desktop window
 ```
 
-The app will be available at `http://localhost:5173`
-
-## Build for production
+### Build
 
 ```bash
+# Build the web app only
 npm run build
-npm run preview
+
+# Build the desktop installer (outputs to /release)
+npm run electron:build
 ```
 
-## Troubleshooting
+> Building on Mac produces a `.dmg`. Building on Windows produces a `.exe`.
+> For distributing both, use the GitHub Actions release workflow (see below).
 
-If you get an error about `@rollup/rollup-darwin-arm64` or similar native modules, run:
+### Troubleshooting
+
+If you get an error about native modules (`@rollup/rollup-darwin-arm64` etc.):
 
 ```bash
 rm -rf node_modules package-lock.json
 npm install
 ```
 
+---
 
+### Repository Rules
 
+#### Branches
 
-## Repository Rules & Workflow
+| Branch | Purpose | Direct commits |
+|---|---|---|
+| `main` | Production — stable, released code | Blocked |
+| `develop` | Integration — ongoing work | Blocked |
+| `feature/*` | New features | Allowed |
 
-### Branch Protection
+All changes to `main` and `develop` must go through a **pull request**.
 
-- **`main` branch**: All changes must be merged via pull request. Direct commits are blocked.
-- **`develop` branch**: All changes must be merged via pull request. Direct commits are blocked.
+#### Recommended workflow
 
-### Code Review
-
-- **GitHub Copilot** automatically reviews all pull requests and provides AI-powered code feedback before merging.
-- Reviews are optional (not enforced as required) but are highly recommended.
-
-### Dependency Management
-
-- **Dependabot** is enabled for:
-  - **npm**: Weekly checks for NPM package updates (max 10 open PRs, auto-labels: `dependencies`, `npm`)
-  - **GitHub Actions**: Weekly checks for action updates (max 5 open PRs, auto-labels: `dependencies`, `github-actions`)
-
-### Screenshots
-
-- A screenshot is automatically captured whenever a pull request is merged into `main`.
-
-### Recommended Workflow
-
-1. Create a feature branch from `develop`: `git checkout -b feature/your-feature develop`
+1. Branch off `develop`: `git checkout -b feature/your-feature develop`
 2. Make your changes and commit
-3. Push your branch and open a pull request to `develop`
-4. Wait for Copilot review and merge
-5. When ready to release, open a PR from `develop` to `main`
-6. After merging to `main`, a screenshot is captured and the deployment is updated
+3. Open a PR to `develop` — Copilot will review automatically
+4. Once stable, open a PR from `develop` → `main`
+
+#### Workflows
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| **Auto Tag** | Push to `main` | Automatically increments the version tag (e.g. `v1.0.3`) |
+| **Release** | New version tag (`v*`) | Builds `.dmg` (Mac) and `.exe` (Windows) via GitHub runners, then publishes a GitHub Release with both installers attached |
+| **Dependabot** | Weekly | Opens PRs to update npm packages and GitHub Actions |
+
+#### Releasing a new version
+
+Merging a PR into `main` triggers everything automatically:
+1. Auto Tag creates a new version tag
+2. Release workflow builds the installers on Mac and Windows runners
+3. A GitHub Release is published with the `.dmg` and `.exe` ready to download
+
+---
+---
+
+## Français
+
+### Prérequis
+
+- [Node.js](https://nodejs.org/) v20+
+- npm
+
+### Installation & Démarrage
+
+```bash
+# 1. Cloner le dépôt
+git clone https://github.com/Jerobel05/iris-app
+cd iris-app
+
+# 2. Installer les dépendances
+npm install
+
+# 3a. Lancer dans le navigateur (mode web)
+npm run dev
+# → Disponible sur http://localhost:5173
+
+# 3b. Lancer en application bureau (Electron)
+npm run electron:dev
+# → Ouvre une fenêtre native sur le bureau
+```
+
+### Build
+
+```bash
+# Compiler l'application web uniquement
+npm run build
+
+# Compiler l'installeur bureau (résultat dans /release)
+npm run electron:build
+```
+
+> Compiler sur Mac produit un `.dmg`. Sur Windows, un `.exe`.
+> Pour distribuer les deux, utiliser le workflow GitHub Actions (voir ci-dessous).
+
+### Dépannage
+
+En cas d'erreur liée aux modules natifs (`@rollup/rollup-darwin-arm64` etc.) :
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+---
+
+### Règles du dépôt
+
+#### Branches
+
+| Branche | Rôle | Commits directs |
+|---|---|---|
+| `main` | Production — code stable et publié | Bloqués |
+| `develop` | Intégration — travail en cours | Bloqués |
+| `feature/*` | Nouvelles fonctionnalités | Autorisés |
+
+Toute modification sur `main` et `develop` doit passer par une **pull request**.
+
+#### Workflow recommandé
+
+1. Créer une branche depuis `develop` : `git checkout -b feature/ma-fonctionnalite develop`
+2. Faire ses modifications et commiter
+3. Ouvrir une PR vers `develop` — Copilot effectue une revue automatiquement
+4. Une fois stable, ouvrir une PR de `develop` → `main`
+
+#### Workflows automatiques
+
+| Workflow | Déclencheur | Action |
+|---|---|---|
+| **Auto Tag** | Push sur `main` | Incrémente automatiquement le tag de version (ex. `v1.0.3`) |
+| **Release** | Nouveau tag de version (`v*`) | Compile le `.dmg` (Mac) et le `.exe` (Windows) via les runners GitHub, puis publie une GitHub Release avec les deux installeurs |
+| **Dependabot** | Hebdomadaire | Ouvre des PRs pour mettre à jour les packages npm et les GitHub Actions |
+
+#### Publier une nouvelle version
+
+Merger une PR dans `main` déclenche tout automatiquement :
+1. Auto Tag crée un nouveau tag de version
+2. Le workflow Release compile les installeurs sur des runners Mac et Windows
+3. Une GitHub Release est publiée avec le `.dmg` et le `.exe` prêts à télécharger
