@@ -11,6 +11,22 @@ Iris is an AI-powered desktop app that extracts important appointment emails and
 - [Node.js](https://nodejs.org/) v20+
 - npm
 
+### Environment Setup
+
+The app connects to a backend API. You need two env files in the project root before running:
+
+**`.env.development`** — used automatically by `npm run electron:dev`:
+```
+VITE_API_URL=http://localhost:8000
+```
+
+**`.env.production`** — used automatically by `npm run electron:build`:
+```
+VITE_API_URL=https://irisbackend-ar0m.onrender.com
+```
+
+A [.env.example](.env.example) file is included in the repo as a reference. Vite handles switching between the two automatically — no manual changes needed.
+
 ### Install & Run
 
 ```bash
@@ -18,7 +34,11 @@ Iris is an AI-powered desktop app that extracts important appointment emails and
 git clone https://github.com/Jerobel05/iris-app
 cd iris-app
 
-# 2. Install dependencies
+# 2. Set up environment files (see Environment Setup above)
+cp .env.example .env.development
+# then edit .env.development with your local backend URL
+
+# 3. Install dependencies
 npm install
 
 # 3a. Run in the browser (web dev mode)
@@ -98,6 +118,22 @@ Merging a PR into `main` triggers everything automatically:
 - [Node.js](https://nodejs.org/) v20+
 - npm
 
+### Configuration de l'environnement
+
+L'application se connecte à un backend. Il faut deux fichiers env à la racine du projet avant de démarrer :
+
+**`.env.development`** — utilisé automatiquement par `npm run electron:dev` :
+```
+VITE_API_URL=http://localhost:8000
+```
+
+**`.env.production`** — utilisé automatiquement par `npm run electron:build` :
+```
+VITE_API_URL=https://irisbackend-ar0m.onrender.com
+```
+
+Un fichier [.env.example](.env.example) est inclus dans le dépôt comme référence. Vite gère le basculement automatiquement — aucune modification manuelle nécessaire.
+
 ### Installation & Démarrage
 
 ```bash
@@ -105,7 +141,11 @@ Merging a PR into `main` triggers everything automatically:
 git clone https://github.com/Jerobel05/iris-app
 cd iris-app
 
-# 2. Installer les dépendances
+# 2. Configurer les fichiers d'environnement (voir section ci-dessus)
+cp .env.example .env.development
+# puis éditer .env.development avec l'URL de votre backend local
+
+# 3. Installer les dépendances
 npm install
 
 # 3a. Lancer dans le navigateur (mode web)

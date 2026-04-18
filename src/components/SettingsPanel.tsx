@@ -1,5 +1,6 @@
 import { X, Mail, Calendar } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -47,6 +48,7 @@ const connectedApps = [
 const profileIcons = ["🟠", "⭐", "👤", "👤", "👤"];
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
+  const { user } = useAuth();
   const [apps, setApps] = useState(connectedApps);
   const [desktopNotif, setDesktopNotif] = useState(true);
   const [soundAlerts, setSoundAlerts] = useState(true);
@@ -101,6 +103,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <label className="text-xs text-muted-foreground block mb-1">Nom</label>
                 <input
                   type="text"
+                  defaultValue={user?.email ? user.email.split("@")[0] : ""}
                   placeholder="John Doe"
                   className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
@@ -109,6 +112,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <label className="text-xs text-muted-foreground block mb-1">E-mail</label>
                 <input
                   type="email"
+                  defaultValue={user?.email ?? ""}
                   placeholder="user@google.com"
                   className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
