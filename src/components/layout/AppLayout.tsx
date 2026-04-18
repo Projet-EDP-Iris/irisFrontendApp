@@ -10,10 +10,11 @@ import {
   Settings,
   History,
   Menu,
-  X,
+  LogOut,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { useAuth } from "@/context/AuthContext";
 
 interface NavItem {
   icon: ReactNode;
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -107,6 +109,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <button className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full text-left">
             <History size={18} />
             {!sidebarCollapsed && <span>Historique</span>}
+          </button>
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-sidebar-accent transition-colors w-full text-left"
+          >
+            <LogOut size={18} />
+            {!sidebarCollapsed && <span>Déconnexion</span>}
           </button>
         </div>
       </aside>

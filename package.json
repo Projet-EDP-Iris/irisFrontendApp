@@ -23,15 +23,15 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.ico"
     },
     "mac": {
       "target": "dmg",
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.icns"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": false,

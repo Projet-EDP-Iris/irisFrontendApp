@@ -1,15 +1,25 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
-  const [, navigate] = useLocation();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/home");
+    setError(null);
+    setIsLoading(true);
+    try {
+      await login(email, password);
+    } catch {
+      setError("E-mail ou mot de passe incorrect.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -100,12 +110,16 @@ export default function LoginPage() {
                 Rester toujours connecté
               </label>
             </div>
+            {error && (
+              <p className="text-sm text-red-500 text-center">{error}</p>
+            )}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90"
+              disabled={isLoading}
+              className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
               style={{ background: "linear-gradient(135deg, #f97316, #ea580c)" }}
             >
-              Connexion
+              {isLoading ? "Connexion..." : "Connexion"}
             </button>
           </form>
 
