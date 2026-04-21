@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
       - name: Get latest tag
         id: latest_tag
@@ -40,3 +41,4 @@ jobs:
           tag: ${{ steps.new_version.outputs.new_version }}
           message: "Auto-tag: ${{ steps.new_version.outputs.new_version }}"
           force_push_tag: true
+          github_token: ${{ secrets.GH_PAT }}
