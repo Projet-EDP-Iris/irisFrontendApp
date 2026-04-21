@@ -1,6 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const { autoUpdater } = require('electron-updater')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -40,6 +44,10 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow()
+
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
