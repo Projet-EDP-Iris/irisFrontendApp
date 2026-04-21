@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "tsc -b && vite build && electron-builder"
+    "electron:build": "tsc -b && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
   },
   "build": {
     "appId": "com.iris.app",
@@ -27,7 +27,8 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "public/icon.icns"
+      "icon": "public/icon.icns",
+      "identity": null
     },
     "linux": {
       "target": "AppImage",
@@ -36,7 +37,12 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
