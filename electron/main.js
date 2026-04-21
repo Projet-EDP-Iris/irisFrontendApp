@@ -26,7 +26,9 @@ function createWindow() {
   } else {
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'))
 
-    win.webContents.on('did-fail-load', () => {
+    win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('Failed to load:', errorCode, errorDescription)
+      win.webContents.openDevTools()
       win.show()
     })
   }
