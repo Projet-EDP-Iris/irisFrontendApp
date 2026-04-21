@@ -143,7 +143,7 @@ export default function LoginPage() {
           </div>
           <div>
             <div className="text-xs font-bold text-gray-600">iris</div>
-            <div className="text-[9px] text-gray-400">v2.1.0</div>
+            <div className="text-[9px] text-gray-400">Beta v0.1.0</div>
           </div>
         </div>
       </div>

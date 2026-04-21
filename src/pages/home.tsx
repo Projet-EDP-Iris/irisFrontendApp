@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 import { useAuth } from "@/context/AuthContext";
 
@@ -145,14 +145,38 @@ export default function HomePage() {
       </div>
 
       {/* Caption */}
-      <motion.p 
-        animate={{ 
+      <motion.p
+        animate={{
           opacity: isIrisActive ? 1 : 0.8,
-          y: isIrisActive ? 5 : 0 
+          y: isIrisActive ? 5 : 0,
         }}
         className="mt-12 text-sm text-primary/80 font-semibold tracking-wide uppercase"
+        style={
+          isIrisActive
+            ? {
+                textShadow:
+                  "0 0 8px rgba(249,115,22,0.8), 0 0 24px rgba(249,115,22,0.4), 0 0 48px rgba(249,115,22,0.2)",
+              }
+            : undefined
+        }
       >
-        {isIrisActive ? "Iris s'éveille..." : "Iris est en sommeil"}
+        {(isIrisActive ? "Iris s'éveille..." : "Iris est en sommeil")
+          .split("")
+          .map((char, i) => (
+            <motion.span
+              key={`${isIrisActive}-${i}`}
+              animate={{ y: [0, -5, 0] }}
+              transition={{
+                duration: 1.6,
+                repeat: Infinity,
+                delay: i * 0.07,
+                ease: "easeInOut",
+              }}
+              style={{ display: "inline-block" }}
+            >
+              {char === " " ? "\u00A0" : char}
+            </motion.span>
+          ))}
       </motion.p>
 
       {/* Iris logo bottom right */}
@@ -165,7 +189,7 @@ export default function HomePage() {
         </div>
         <div>
           <div className="text-xs font-bold text-primary/70 uppercase tracking-tighter">iris</div>
-          <div className="text-[9px] text-muted-foreground">PREMIUM v2.1.0</div>
+          <div className="text-[9px] text-muted-foreground">Beta v0.1.0</div>
         </div>
       </div>
     </div>
