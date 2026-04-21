@@ -11,8 +11,18 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            build_args: --mac
+            artifact_name: dmg-installer
+            artifact_path: release/*.dmg
+
+          - os: windows-latest
+            build_args: --win
+            artifact_name: exe-installer
+            artifact_path: release/*.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -29,29 +39,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Electron app
-        run: npm run electron:build
+      - name: Build Vite app
+        run: npm run build
+
+      - name: Build Electron package
+        run: npx electron-builder ${{ matrix.build_args }} --publish=never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Upload artifacts (macOS)
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dmg-installer
-          path: release/*.dmg
-          if-no-files-found: ignore
+      - name: List release output
+        shell: bash
+        run: |
+          ls -la release/ 2>/dev/null || echo "WARNING - release directory not found"
 
-      - name: Upload artifacts (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: exe-installer
-          path: release/*.exe
-          if-no-files-found: ignore
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
 
   release:
     needs: build
+    if: always()
     runs-on: ubuntu-latest
 
     steps:

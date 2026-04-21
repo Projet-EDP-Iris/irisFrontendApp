@@ -26,12 +26,7 @@
       "icon": "public/icon.ico"
     },
     "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        }
-      ],
+      "target": "dmg",
       "icon": "public/icon.icns",
       "identity": null
     },
