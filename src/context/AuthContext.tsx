@@ -19,6 +19,8 @@ interface AuthContextValue {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  isIrisActive: boolean;
+  setIsIrisActive: (active: boolean) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -28,10 +30,18 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [, navigate] = useLocation();
   const [user, setUser] = useState<User | null>(null);
+  const [isIrisActive, setIsIrisActiveState] = useState<boolean>(
+    localStorage.getItem("iris_active") === "true"
+  );
   const [token, setToken] = useState<string | null>(
     localStorage.getItem("iris_token")
   );
   const [isLoading, setIsLoading] = useState(true);
+
+  const setIsIrisActive = (active: boolean) => {
+    setIsIrisActiveState(active);
+    localStorage.setItem("iris_active", active.toString());
+  };
 
   // On mount, validate existing token
   useEffect(() => {
@@ -66,13 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("iris_token");
+    localStorage.removeItem("iris_active");
     setToken(null);
     setUser(null);
+    setIsIrisActiveState(false);
     navigate("/");
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isIrisActive, setIsIrisActive, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
