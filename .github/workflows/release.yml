@@ -56,14 +56,14 @@ jobs:
 
     steps:
       - name: Download macOS artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dmg-installer
           path: dmg-installer
         continue-on-error: true
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: exe-installer
           path: exe-installer
