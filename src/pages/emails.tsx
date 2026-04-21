@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { MoreHorizontal, Star } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const focusedEmails = [
   {
@@ -69,7 +70,10 @@ const otherEmails = [
 
 export default function EmailsPage() {
   const [activeTab, setActiveTab] = useState<"focused" | "other">("focused");
-  const [summarizing] = useState(true);
+  const { isIrisActive } = useAuth();
+  
+  // Only show summarizing indicator if Iris is active
+  const isSummarizing = isIrisActive;
 
   const emails = activeTab === "focused" ? focusedEmails : otherEmails;
 
@@ -81,11 +85,16 @@ export default function EmailsPage() {
           <h1 className="text-2xl font-bold text-foreground">Emails</h1>
           <p className="text-sm text-muted-foreground mt-0.5">From your emails</p>
         </div>
-        {summarizing && (
+        {isIrisActive ? (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card">
             <span className="text-xs text-primary">✦</span>
             <span className="text-sm text-muted-foreground">Iris is summarizing your emails...</span>
             <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-muted/30">
+            <span className="text-xs text-muted-foreground opacity-50">✦</span>
+            <span className="text-sm text-muted-foreground italic">Iris est en sommeil</span>
           </div>
         )}
       </div>
@@ -158,7 +167,12 @@ export default function EmailsPage() {
             <div className="flex items-center gap-2 flex-shrink-0">
               {email.action && (
                 <button
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 ${email.actionColor}`}
+                  disabled={!isIrisActive}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                    isIrisActive 
+                      ? `${email.actionColor} text-white hover:opacity-90 shadow-sm` 
+                      : "bg-primary/20 text-primary/40 cursor-not-allowed"
+                  }`}
                 >
                   {email.action}
                 </button>
