@@ -17,115 +17,6 @@ const IrisLogo = ({ className = "w-5 h-6" }) => (
   </svg>
 );
 
-// ── Envelope SVG ───────────────────────────────────────────
-const Envelope = ({ size = 40, rotate = 0, opacity = 1 }) => (
-  <svg
-    width={size} height={size * 0.75}
-    viewBox="0 0 56 42"
-    fill="none"
-    style={{ transform: `rotate(${rotate}deg)`, opacity }}
-  >
-    <rect x="1" y="1" width="54" height="40" rx="4" fill="#D4953A" />
-    <rect x="1" y="1" width="54" height="40" rx="4" fill="url(#envGrad)" />
-    <path d="M1 5l27 18L55 5" stroke="#B8742A" strokeWidth="1.5" fill="none" />
-    <path d="M1 41L20 22M55 41L36 22" stroke="#B8742A" strokeWidth="1" />
-    <circle cx="28" cy="28" r="4" fill="#E07820" opacity="0.7" />
-    <defs>
-      <linearGradient id="envGrad" x1="28" y1="0" x2="28" y2="42" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#F5C060" />
-        <stop offset="1" stopColor="#C8842A" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
-
-// ── Illustration panel ─────────────────────────────────────
-const IllustrationPanel = () => (
-  <div className="relative w-full h-full flex flex-col items-center justify-center" style={{ background: "#000", minHeight: 320 }}>
-
-    {/* IRIS INC. header */}
-    <div className="absolute top-8 flex flex-col items-center gap-1 z-10">
-      <IrisLogo className="w-7 h-8" />
-      <span className="text-xs font-bold tracking-widest" style={{ color: "#C8742A" }}>IRIS INC.</span>
-    </div>
-
-    {/* Floating envelopes + person scene */}
-    <div className="relative" style={{ width: 420, height: 340 }}>
-
-      {/* ── Envelopes scattered around ── */}
-      {/* left cluster */}
-      <div className="absolute" style={{ top: 30,  left: 10  }}><Envelope size={52} rotate={-25} /></div>
-      <div className="absolute" style={{ top: 100, left: 0   }}><Envelope size={66} rotate={15}  /></div>
-      <div className="absolute" style={{ top: 185, left: 10  }}><Envelope size={58} rotate={-10} /></div>
-      <div className="absolute" style={{ top: 245, left: 30  }}><Envelope size={74} rotate={5}   /></div>
-      <div className="absolute" style={{ top: 60,  left: 80  }}><Envelope size={38} rotate={-18} /></div>
-      <div className="absolute" style={{ top: 145, left: 65  }}><Envelope size={44} rotate={20}  /></div>
-
-      {/* top center */}
-      <div className="absolute" style={{ top: 0,   left: 175 }}><Envelope size={46} rotate={-8}  /></div>
-      <div className="absolute" style={{ top: 25,  left: 260 }}><Envelope size={36} rotate={12}  /></div>
-
-      {/* right cluster */}
-      <div className="absolute" style={{ top: 20,  right: 20 }}><Envelope size={60} rotate={18}  /></div>
-      <div className="absolute" style={{ top: 90,  right: 5  }}><Envelope size={50} rotate={-22} /></div>
-      <div className="absolute" style={{ top: 165, right: 0  }}><Envelope size={44} rotate={8}   /></div>
-      <div className="absolute" style={{ top: 60,  right: 75 }}><Envelope size={34} rotate={-12} /></div>
-      <div className="absolute" style={{ top: 135, right: 65 }}><Envelope size={48} rotate={25}  /></div>
-
-      {/* behind person / overlapping */}
-      <div className="absolute" style={{ top: 115, left: 115 }}><Envelope size={42} rotate={-20} opacity={0.8} /></div>
-      <div className="absolute" style={{ top: 155, left: 155 }}><Envelope size={38} rotate={10}  opacity={0.9} /></div>
-      <div className="absolute" style={{ top: 200, left: 200 }}><Envelope size={34} rotate={-5}  opacity={0.85}/></div>
-
-      {/* bottom */}
-      <div className="absolute" style={{ top: 295, right: 55 }}><Envelope size={28} rotate={-15} /></div>
-
-      {/* ── Person (SVG illustration) ── */}
-      <svg
-        viewBox="0 0 200 200"
-        className="absolute"
-        style={{ width: 200, height: 200, top: 110, left: 110 }}
-        fill="none"
-      >
-        {/* body / torso */}
-        <ellipse cx="100" cy="145" rx="38" ry="18" fill="#4A3728" opacity="0.4" />
-        {/* legs */}
-        <path d="M70 155 Q60 180 55 195" stroke="#5C4535" strokeWidth="18" strokeLinecap="round" />
-        <path d="M130 155 Q145 178 150 192" stroke="#5C4535" strokeWidth="18" strokeLinecap="round" />
-        {/* shoes */}
-        <ellipse cx="52" cy="196" rx="16" ry="7" fill="#2A1F18" />
-        <ellipse cx="152" cy="193" rx="16" ry="7" fill="#2A1F18" />
-        {/* torso / shirt */}
-        <path d="M72 120 Q68 155 70 165 Q100 172 130 165 Q132 155 128 120 Q114 110 100 110 Q86 110 72 120Z" fill="#D4722A" />
-        {/* arms */}
-        <path d="M72 125 Q50 145 55 165" stroke="#D4722A" strokeWidth="16" strokeLinecap="round" />
-        <path d="M128 125 Q150 140 148 160" stroke="#D4722A" strokeWidth="16" strokeLinecap="round" />
-        {/* phone in hands */}
-        <rect x="68" y="158" width="28" height="18" rx="4" fill="#F5C030" />
-        <rect x="70" y="160" width="24" height="14" rx="2" fill="#1A1A2E" />
-        {/* neck */}
-        <rect x="93" y="98" width="14" height="16" rx="4" fill="#C4845A" />
-        {/* head */}
-        <ellipse cx="100" cy="88" rx="26" ry="28" fill="#C4845A" />
-        {/* hair */}
-        <path d="M74 80 Q76 55 100 58 Q124 55 126 80 Q118 62 100 63 Q82 62 74 80Z" fill="#3A2820" />
-        {/* worried eyes */}
-        <ellipse cx="91" cy="88" rx="4" ry="4.5" fill="white" />
-        <ellipse cx="109" cy="88" rx="4" ry="4.5" fill="white" />
-        <circle cx="92" cy="89" r="2.5" fill="#2A1F18" />
-        <circle cx="110" cy="89" r="2.5" fill="#2A1F18" />
-        {/* worried brow */}
-        <path d="M86 80 Q91 77 96 80" stroke="#3A2820" strokeWidth="2" strokeLinecap="round" />
-        <path d="M104 80 Q109 77 114 80" stroke="#3A2820" strokeWidth="2" strokeLinecap="round" />
-        {/* mouth */}
-        <path d="M94 100 Q100 96 106 100" stroke="#3A2820" strokeWidth="1.5" strokeLinecap="round" />
-        {/* coins on floor */}
-        <circle cx="90" cy="198" r="5" fill="#D4A520" />
-        <circle cx="103" cy="200" r="4" fill="#D4A520" />
-      </svg>
-    </div>
-  </div>
-);
 
 // ── App icons ──────────────────────────────────────────────
 const GmailIcon = () => (
@@ -178,7 +69,6 @@ const APPS = [
 
 export default function IrisConnectApps() {
   const [connected, setConnected] = useState(new Set());
- const [accepted, setAccepted] = useState(false);
  const [, navigate] = useLocation();
 
   const toggle = (id: string) => {
@@ -271,11 +161,13 @@ export default function IrisConnectApps() {
 
         {/* Bottom buttons */}
         <div className="flex gap-3 mt-auto">
-          <button className="flex-1 py-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">
+          <button
+            onClick={() => navigate("/home")}
+            className="flex-1 py-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer">
             Skip for now
           </button>
           <button
-            onClick={() => navigate("/HomePage")}
+            onClick={() => navigate("/home")}
             className="flex-1 py-4 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity cursor-pointer"
             style={{ background: "linear-gradient(90deg,#FF5722,#FF8C42)" }}
           >

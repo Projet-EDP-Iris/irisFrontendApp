@@ -3,9 +3,13 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
+  Mail,
+  CheckSquare,
+  BarChart2,
   Sun,
   Moon,
   Settings,
+  History,
   LogOut,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -20,7 +24,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { icon: <Home size={18} />, label: "Accueil", path: "/home" },
-  { icon: null, label: "E-mails", path: "/emails" },
+  { icon: <Mail size={18} />, label: "E-mails", path: "/emails" },
+  { icon: <CheckSquare size={18} />, label: "Tâches", path: "/tasks" },
+  { icon: <BarChart2 size={18} />, label: "Analyses", path: "/analysis" },
 ];
 
 function playPop(expanding: boolean) {
@@ -285,6 +291,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </AnimatePresence>
           </button>
 
+          {/* History */}
+          <button className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full text-left">
+            <span className="shrink-0">
+              <History size={18} />
+            </span>
+            <AnimatePresence>
+              {!sidebarCollapsed && (
+                <motion.span
+                  variants={labelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                  transition={{ duration: 0.18, delay: 0.06 }}
+                  className="whitespace-nowrap overflow-hidden"
+                >
+                  Historique
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+
+          {/* Logout */}
           <button
             onClick={logout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-sidebar-accent transition-colors w-full text-left"
