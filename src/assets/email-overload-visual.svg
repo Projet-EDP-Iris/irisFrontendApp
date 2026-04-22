@@ -1,0 +1,51 @@
+<svg width="680" height="680" viewBox="0 0 680 680" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="122" y1="68" x2="559" y2="610" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF4EC"/>
+      <stop offset="1" stop-color="#FFE3D1"/>
+    </linearGradient>
+    <linearGradient id="cardA" x1="173" y1="173" x2="530" y2="476" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFF0E6"/>
+    </linearGradient>
+    <linearGradient id="cardB" x1="151" y1="200" x2="509" y2="502" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8F3"/>
+      <stop offset="1" stop-color="#FFE7DA"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="270" y1="250" x2="462" y2="449" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB27A"/>
+      <stop offset="1" stop-color="#FF6A2A"/>
+    </linearGradient>
+    <filter id="shadow" x="87" y="109" width="506" height="458" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.550278 0 0 0 0 0.209313 0 0 0 0 0.0306778 0 0 0 0.2 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+  </defs>
+
+  <circle cx="340" cy="340" r="250" fill="url(#bg)"/>
+  <circle cx="340" cy="340" r="210" stroke="white" stroke-opacity="0.55" stroke-width="1.5"/>
+  <circle cx="340" cy="340" r="168" stroke="white" stroke-opacity="0.4" stroke-width="1.5"/>
+
+  <g filter="url(#shadow)">
+    <rect x="151" y="193" width="378" height="226" rx="28" transform="rotate(-8 151 193)" fill="url(#cardB)"/>
+    <rect x="176" y="160" width="378" height="226" rx="28" transform="rotate(6 176 160)" fill="url(#cardA)"/>
+    <rect x="151" y="190" width="378" height="226" rx="28" fill="white"/>
+
+    <rect x="192" y="231" width="296" height="150" rx="24" fill="url(#accent)"/>
+    <path d="M192 254C192 240.745 202.745 230 216 230H464C477.255 230 488 240.745 488 254V257L352.73 338.554C345.137 343.133 335.625 343.073 328.09 338.398L192 253.999V254Z" fill="#FF8D50"/>
+    <path d="M192 258L310.171 332.623C328.549 344.229 351.981 344.377 370.505 333.005L488 260.875V357C488 370.255 477.255 381 464 381H216C202.745 381 192 370.255 192 357V258Z" fill="#FF6A2A"/>
+
+    <rect x="224" y="423" width="104" height="14" rx="7" fill="#FFD6BD"/>
+    <rect x="340" y="423" width="76" height="14" rx="7" fill="#FFE8DA"/>
+    <rect x="432" y="423" width="32" height="14" rx="7" fill="#FFD6BD"/>
+
+    <circle cx="470" cy="213" r="34" fill="#2A2017" fill-opacity="0.18"/>
+    <circle cx="470" cy="213" r="28" fill="#2A2017"/>
+    <path d="M470 195V213L481 220" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
