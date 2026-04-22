@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { getSignupDraft } from "@/lib/signupDraft";
+import emailOverloadVisual from "@/assets/email-overload-visual.svg";
 
 function validatePasswordPolicy(password: string): string | null {
   if (password.length < 8) return "Le mot de passe doit contenir au moins 8 caracteres.";
@@ -157,7 +158,7 @@ export default function IrisConnectApps() {
 
       <div className="w-1/2 relative flex items-center justify-center px-10 overflow-hidden" style={{ background: "linear-gradient(160deg, #FFAD6A 0%, #FF8C42 40%, #FF5722 100%)" }}>
         <motion.img
-          src="/EmailOverloadVisualIris.png"
+          src={emailOverloadVisual}
           alt="Email overload visual for Iris onboarding"
           className="relative z-10 w-[84%] max-w-[620px] object-contain drop-shadow-2xl"
           animate={{ y: [0, -8, 0], scale: [1, 1.01, 1] }}
