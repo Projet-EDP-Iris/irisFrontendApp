@@ -40,8 +40,12 @@
       "icon": "public/icon.png"
     },
     "nsis": {
+      "artifactName": "Iris-Setup.exe",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "dmg": {
+      "artifactName": "Iris.dmg"
     },
     "publish": [
       {
