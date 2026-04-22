@@ -74,8 +74,8 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Dark brown background - main app bg */
-  --background: 20 10% 12%;
+  /* Dark brown background - main app bg (#2A1F14) */
+  --background: 30 36% 12%;
   --foreground: 30 20% 90%;
 
   --border: 25 15% 22%;
@@ -85,13 +85,13 @@
   --card-foreground: 30 20% 90%;
   --card-border: 25 15% 24%;
 
-  /* Sidebar - darker brown */
-  --sidebar: 20 15% 10%;
+  /* Sidebar - warm dark brown (#362818) */
+  --sidebar: 32 38% 15%;
   --sidebar-foreground: 30 20% 85%;
-  --sidebar-border: 25 15% 18%;
+  --sidebar-border: 30 15% 14%;
   --sidebar-primary: 25 85% 50%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 25 20% 18%;
+  --sidebar-accent: 32 30% 20%;
   --sidebar-accent-foreground: 30 20% 85%;
   --sidebar-ring: 25 85% 50%;
 

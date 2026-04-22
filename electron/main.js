@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import { createRequire } from 'module'
@@ -20,6 +20,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     titleBarStyle: 'default',
     show: false,
@@ -41,6 +42,27 @@ function createWindow() {
     win.show()
   })
 }
+
+ipcMain.handle('iris:notify-signup-success', (_event, payload = {}) => {
+  if (!Notification.isSupported()) {
+    return { shown: false, reason: 'unsupported' }
+  }
+
+  const userName = typeof payload.userName === 'string' ? payload.userName.trim() : ''
+  const soundEnabled = payload.soundEnabled !== false
+  const body = userName
+    ? `Welcome ${userName}, your account is ready.`
+    : 'Your account was created successfully.'
+
+  const notification = new Notification({
+    title: 'Welcome to Iris',
+    body,
+    silent: !soundEnabled,
+  })
+
+  notification.show()
+  return { shown: true }
+})
 
 app.whenReady().then(() => {
   createWindow()

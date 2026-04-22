@@ -9,7 +9,6 @@ export default function HomePage() {
   const { isIrisActive, setIsIrisActive } = useAuth();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clean up timer on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -18,18 +17,16 @@ export default function HomePage() {
 
   const handleToggle = () => {
     if (isIrisActive) {
-      // Toggle OFF: cancel navigation
       setIsIrisActive(false);
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     } else {
-      // Toggle ON: start navigation timer
       setIsIrisActive(true);
       timerRef.current = setTimeout(() => {
         navigate("/emails");
-      }, 2000); // 2 second delay
+      }, 2000);
     }
   };
 
@@ -37,7 +34,7 @@ export default function HomePage() {
     <div className="flex flex-col h-full items-center justify-center relative bg-background overflow-hidden">
       {/* Background ambience */}
       {isIrisActive && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="absolute inset-0 z-0 pointer-events-none"
@@ -49,27 +46,24 @@ export default function HomePage() {
 
       {/* Power orb system */}
       <div className="relative flex items-center justify-center z-10">
-        {/* Pulsing Outer glow */}
+        {/* Pulsing outer glow */}
         <motion.div
           animate={{
             scale: isIrisActive ? 1.1 : 1,
             opacity: isIrisActive ? 0.8 : 0,
           }}
-          transition={{
-            duration: 0.7,
-            ease: "easeOut"
-          }}
-          className="absolute rounded-full transition-all duration-700"
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="absolute rounded-full"
           style={{
             width: "480px",
             height: "480px",
             background: "radial-gradient(circle, rgba(249,115,22,0.4) 0%, transparent 75%)",
             filter: "blur(40px)",
-            pointerEvents: "none"
+            pointerEvents: "none",
           }}
         />
 
-        {/* Energy Ripple Waves */}
+        {/* Energy ripple waves */}
         {isIrisActive && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             {[0, 1, 2].map((i) => (
@@ -94,12 +88,15 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Rotating Energy Ring */}
+        {/* Rotating energy ring */}
         {isIrisActive && (
           <motion.div
             initial={{ rotate: 0, opacity: 0, scale: 0.8 }}
             animate={{ rotate: 360, opacity: 1, scale: 1 }}
-            transition={{ rotate: { duration: 3, repeat: Infinity, ease: "linear" }, opacity: { duration: 0.5 } }}
+            transition={{
+              rotate: { duration: 3, repeat: Infinity, ease: "linear" },
+              opacity: { duration: 0.5 },
+            }}
             className="absolute rounded-full border-2 border-dashed pointer-events-none"
             style={{
               width: "280px",
@@ -110,14 +107,14 @@ export default function HomePage() {
           />
         )}
 
-        {/* Inner circle - clickable button */}
+        {/* Power button */}
         <motion.button
           onClick={handleToggle}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           animate={{
-            boxShadow: isIrisActive 
-              ? "0 0 80px rgba(249,115,22,0.9), inset 0 0 20px rgba(255,255,255,0.3)" 
+            boxShadow: isIrisActive
+              ? "0 0 80px rgba(249,115,22,0.9), inset 0 0 20px rgba(255,255,255,0.3)"
               : "0 0 30px rgba(184,76,40,0.4)",
             backgroundColor: isIrisActive ? "#f97316" : "#b84c28",
           }}
@@ -128,7 +125,6 @@ export default function HomePage() {
               : "linear-gradient(135deg, #b84c28 0%, #8a3518 100%)",
           }}
         >
-          {/* Power icon */}
           <motion.div
             animate={{
               rotate: isIrisActive ? 360 : 0,
@@ -144,7 +140,7 @@ export default function HomePage() {
         </motion.button>
       </div>
 
-      {/* Caption */}
+      {/* Animated caption */}
       <motion.p
         animate={{
           opacity: isIrisActive ? 1 : 0.8,
