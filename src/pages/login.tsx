@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-
+import { useLocation } from "wouter";
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [, navigate] = useLocation();
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +126,9 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Vous n'avez pas de compte?{" "}
-            <button className="text-orange-500 font-semibold hover:underline">
+            <button   
+            onClick={() => navigate("/begin")}
+            className="text-orange-500 font-semibold hover:underline">
               S'inscrire
             </button>
           </p>
@@ -193,7 +196,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               {[
                 { label: "Gmail", icon: "✉️", active: true },
-                { label: "Google Calendar", icon: "📅", active: true },
+                { label: "Google Calendar", icon: "📅", active: false },
                 { label: "Outlook", icon: "✉️", active: false },
                 { label: "Apple Calendar", icon: "📅", active: false },
               ].map((item) => (

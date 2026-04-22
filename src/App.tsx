@@ -5,6 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
+import Begin from "@/pages/signup/begin";
+import IrisSignup from "@/pages/signup/signup";
+import ProfileChoose from "@/pages/signup/profile_cchoose";
+import ConnectApp from "@/pages/signup/connect_app";
 import HomePage from "@/pages/home";
 import EmailsPage from "@/pages/emails";
 import TasksPage from "@/pages/tasks";
@@ -26,6 +30,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LoginPage} />
+      <Route path="/begin" component={Begin} />
+      <Route path="/signup" component={IrisSignup} />
+      <Route path="/profile-choose" component={ProfileChoose} />
+      <Route path="/ConnectApp" component={ConnectApp} />
+      <Route path="/HomePage" component={HomePage} />
       <Route path="/home">
         <ProtectedRoute>
           <AppLayout>
