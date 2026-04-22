@@ -4,17 +4,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
   Mail,
-  CheckSquare,
-  BarChart2,
   Sun,
   Moon,
   Settings,
-  History,
   LogOut,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { useAuth } from "@/context/AuthContext";
+import { getProfileIconById } from "@/constants/profileIcons";
+import { isSoundAlertsEnabled } from "@/lib/notificationPreferences";
 
 interface NavItem {
   icon: ReactNode;
@@ -25,11 +24,10 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: <Home size={18} />, label: "Accueil", path: "/home" },
   { icon: <Mail size={18} />, label: "E-mails", path: "/emails" },
-  { icon: <CheckSquare size={18} />, label: "Tâches", path: "/tasks" },
-  { icon: <BarChart2 size={18} />, label: "Analyses", path: "/analysis" },
 ];
 
 function playPop(expanding: boolean) {
+  if (!isSoundAlertsEnabled()) return;
   try {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
@@ -43,6 +41,34 @@ function playPop(expanding: boolean) {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.13);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.13);
+  } catch {
+    // AudioContext may be blocked before user interaction — fail silently
+  }
+}
+
+function playSettingsPanelPop(opening: boolean) {
+  if (!isSoundAlertsEnabled()) return;
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (opening) {
+      // Slightly brighter "pop-in" sound for opening.
+      osc.frequency.setValueAtTime(280, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.08);
+    } else {
+      // Slightly lower "pop-out" sound for closing.
+      osc.frequency.setValueAtTime(360, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.1);
+    }
+
+    gain.gain.setValueAtTime(0.11, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.14);
   } catch {
     // AudioContext may be blocked before user interaction — fail silently
   }
@@ -122,6 +148,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
+  const selectedIcon = getProfileIconById(user?.profile_icon);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -148,10 +175,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <AnimatedHamburger collapsed={sidebarCollapsed} />
           </button>
-          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6">
-              <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-            </svg>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: selectedIcon.bg }}>
+            {selectedIcon.icon}
           </div>
           <AnimatePresence>
             {!sidebarCollapsed && (
@@ -163,7 +188,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 transition={{ duration: 0.18, delay: 0.05 }}
                 className="text-xs text-sidebar-foreground/60 font-medium uppercase tracking-wide whitespace-nowrap overflow-hidden"
               >
-                {user?.email.split("@")[0]}
+                {user?.name || user?.email.split("@")[0]}
               </motion.p>
             )}
           </AnimatePresence>
@@ -259,7 +284,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
           {/* Settings — gear spins periodically */}
           <button
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              playSettingsPanelPop(true);
+              setSettingsOpen(true);
+            }}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full text-left"
           >
             <motion.span
@@ -286,27 +314,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   className="whitespace-nowrap overflow-hidden"
                 >
                   Paramètres
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </button>
-
-          {/* History */}
-          <button className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full text-left">
-            <span className="shrink-0">
-              <History size={18} />
-            </span>
-            <AnimatePresence>
-              {!sidebarCollapsed && (
-                <motion.span
-                  variants={labelVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  transition={{ duration: 0.18, delay: 0.06 }}
-                  className="whitespace-nowrap overflow-hidden"
-                >
-                  Historique
                 </motion.span>
               )}
             </AnimatePresence>
@@ -342,7 +349,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 overflow-auto relative">{children}</main>
 
       {/* Settings Panel */}
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsPanel
+          onClose={() => {
+            playSettingsPanelPop(false);
+            setSettingsOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

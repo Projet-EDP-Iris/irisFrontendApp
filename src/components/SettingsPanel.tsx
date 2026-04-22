@@ -1,6 +1,12 @@
 import { X, Mail, Calendar } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { getProfileIconById, PROFILE_ICON_OPTIONS } from "@/constants/profileIcons";
+import {
+  isDesktopNotificationsEnabled,
+  isSoundAlertsEnabled,
+  setNotificationPreference,
+} from "@/lib/notificationPreferences";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -14,6 +20,7 @@ const connectedApps = [
     lastSync: "2 min ago",
     enabled: true,
     color: "bg-primary/20",
+    availableInDemo: true,
   },
   {
     id: "google-calendar",
@@ -22,6 +29,7 @@ const connectedApps = [
     lastSync: "2 min ago",
     enabled: true,
     color: "bg-primary/20",
+    availableInDemo: true,
   },
   {
     id: "outlook",
@@ -34,6 +42,7 @@ const connectedApps = [
     lastSync: "2 min ago",
     enabled: false,
     color: "bg-blue-500/20",
+    availableInDemo: false,
   },
   {
     id: "apple-calendar",
@@ -42,23 +51,65 @@ const connectedApps = [
     lastSync: "2 min ago",
     enabled: false,
     color: "bg-gray-500/20",
+    availableInDemo: false,
   },
 ];
 
-const profileIcons = ["🟠", "⭐", "👤", "👤", "👤"];
-
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const [apps, setApps] = useState(connectedApps);
-  const [desktopNotif, setDesktopNotif] = useState(true);
-  const [soundAlerts, setSoundAlerts] = useState(true);
-  const [scanMode, setScanMode] = useState("Continuous scanning");
-  const [sessionDuration, setSessionDuration] = useState("1 hour");
+  const [desktopNotif, setDesktopNotif] = useState(isDesktopNotificationsEnabled());
+  const [soundAlerts, setSoundAlerts] = useState(isSoundAlertsEnabled());
+  const initialName = user?.name ?? user?.email?.split("@")[0] ?? "";
+  const initialEmail = user?.email ?? "";
+  const [name, setName] = useState(initialName);
+  const [email, setEmail] = useState(initialEmail);
+  const [selectedIcon, setSelectedIcon] = useState(getProfileIconById(user?.profile_icon).id);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const isNameDirty = name.trim() !== initialName.trim();
+  const isEmailDirty = email.trim() !== initialEmail.trim();
+  const isIconDirty = selectedIcon !== getProfileIconById(user?.profile_icon).id;
+  const hasProfileChanges = isNameDirty || isEmailDirty || isIconDirty;
 
   const toggleApp = (id: string) => {
     setApps((prev) =>
-      prev.map((app) => (app.id === id ? { ...app, enabled: !app.enabled } : app))
+      prev.map((app) => {
+        if (app.id !== id || !app.availableInDemo) return app;
+        return { ...app, enabled: !app.enabled };
+      })
     );
+  };
+
+  const handleSaveProfile = async () => {
+    if (!hasProfileChanges) {
+      setSaveMessage("Aucune modification detectee.");
+      return;
+    }
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      await updateProfile({ name: name.trim(), email: email.trim(), profile_icon: selectedIcon });
+      setSaveMessage("Profil mis a jour.");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Erreur lors de la sauvegarde";
+      setSaveMessage(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDesktopNotifToggle = () => {
+    const nextValue = !desktopNotif;
+    setDesktopNotif(nextValue);
+    setNotificationPreference("desktop", nextValue);
+  };
+
+  const handleSoundAlertsToggle = () => {
+    const nextValue = !soundAlerts;
+    setSoundAlerts(nextValue);
+    setNotificationPreference("sound", nextValue);
   };
 
   return (
@@ -68,7 +119,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border">
+        <div className="sticky top-0 z-20 flex items-center justify-between px-5 py-4 border-b border-sidebar-border bg-sidebar/95 backdrop-blur-sm">
           <h2 className="text-base font-semibold text-foreground">Paramètres</h2>
           <button
             onClick={onClose}
@@ -87,14 +138,16 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </div>
             <div className="text-xs text-muted-foreground mb-2">Profile Icon</div>
             <div className="flex gap-2 mb-4">
-              {profileIcons.map((icon, i) => (
+              {PROFILE_ICON_OPTIONS.map((icon) => (
                 <button
-                  key={i}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                    i === 0 ? "ring-2 ring-primary" : ""
-                  } bg-primary/20 hover:bg-primary/30 transition-colors`}
+                  key={icon.id}
+                  onClick={() => setSelectedIcon(icon.id)}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${
+                    selectedIcon === icon.id ? "ring-2 ring-primary" : ""
+                  }`}
+                  style={{ background: icon.bg }}
                 >
-                  {i === 0 ? "🟠" : i === 1 ? "⭐" : "👤"}
+                  {icon.icon}
                 </button>
               ))}
             </div>
@@ -103,37 +156,62 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <label className="text-xs text-muted-foreground block mb-1">Nom</label>
                 <input
                   type="text"
-                  defaultValue={user?.email ? user.email.split("@")[0] : ""}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="John Doe"
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className={`w-full rounded-lg px-3 py-2 text-sm placeholder-muted-foreground focus:outline-none focus:ring-1 ${
+                    isNameDirty
+                      ? "bg-card border border-primary/50 text-foreground focus:ring-primary"
+                      : "bg-card/50 border border-border/70 text-foreground/75 focus:ring-primary"
+                  }`}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">E-mail</label>
                 <input
                   type="email"
-                  defaultValue={user?.email ?? ""}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@google.com"
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className={`w-full rounded-lg px-3 py-2 text-sm placeholder-muted-foreground focus:outline-none focus:ring-1 ${
+                    isEmailDirty
+                      ? "bg-card border border-primary/50 text-foreground focus:ring-primary"
+                      : "bg-card/50 border border-border/70 text-foreground/75 focus:ring-primary"
+                  }`}
                 />
               </div>
-              <button className="text-xs text-primary hover:underline">
-                Changer le mot de passe
-              </button>
+              <div className="pt-1 space-y-2">
+                <button className="w-full rounded-xl py-2 text-xs font-medium border border-primary/35 text-primary hover:bg-primary/10 transition-colors">
+                  Changer le mot de passe
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={saving || !hasProfileChanges}
+                  className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Enregistrement..." : "Enregistrer le profil"}
+                </button>
+              </div>
+              {saveMessage && <p className="text-xs text-muted-foreground">{saveMessage}</p>}
             </div>
           </div>
 
           {/* Language */}
-          <div>
+          <div className="opacity-50">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs">🌐</span>
               <span className="text-sm font-medium text-foreground">Langue</span>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Demo</span>
             </div>
-            <select className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+            <select
+              disabled
+              className="w-full bg-card/60 border border-border rounded-lg px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+            >
               <option>Français</option>
               <option>English</option>
               <option>Español</option>
             </select>
+            <p className="text-[10px] text-muted-foreground mt-1">Indisponible dans cette version demo.</p>
           </div>
 
           {/* Connected services */}
@@ -146,7 +224,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               {apps.map((app) => (
                 <div
                   key={app.id}
-                  className="flex items-center justify-between bg-card rounded-xl px-3 py-2.5 border border-border"
+                  className={`flex items-center justify-between rounded-xl px-3 py-2.5 border ${
+                    app.availableInDemo ? "bg-card border-border" : "bg-card/35 border-border/60 opacity-60"
+                  }`}
                 >
                   <div className="flex items-center gap-2">
                     <div className={`w-7 h-7 rounded-lg ${app.color} flex items-center justify-center`}>
@@ -154,11 +234,15 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                     </div>
                     <div>
                       <div className="text-xs font-medium text-foreground">{app.name}</div>
-                      <div className="text-[10px] text-muted-foreground">Last sync: {app.lastSync}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Last sync: {app.lastSync}
+                        {!app.availableInDemo && " • Demo indisponible"}
+                      </div>
                     </div>
                   </div>
                   <button
                     onClick={() => toggleApp(app.id)}
+                    disabled={!app.availableInDemo}
                     className={`w-10 h-5 rounded-full transition-colors relative ${
                       app.enabled ? "bg-primary" : "bg-muted"
                     }`}
@@ -177,40 +261,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </div>
           </div>
 
-          {/* Schedules */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs">⚙</span>
-              <span className="text-sm font-medium text-foreground">Schedules</span>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Session Duration</label>
-                <select
-                  value={sessionDuration}
-                  onChange={(e) => setSessionDuration(e.target.value)}
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option>30 minutes</option>
-                  <option>1 hour</option>
-                  <option>2 hours</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Scan Mode</label>
-                <select
-                  value={scanMode}
-                  onChange={(e) => setScanMode(e.target.value)}
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option>Continuous scanning</option>
-                  <option>Scheduled scanning</option>
-                  <option>Manual only</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
           {/* Notifications */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -224,7 +274,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <div className="text-[11px] text-muted-foreground">Show system notifications for events</div>
                 </div>
                 <button
-                  onClick={() => setDesktopNotif(!desktopNotif)}
+                  onClick={handleDesktopNotifToggle}
                   className={`w-10 h-5 rounded-full transition-colors relative ${
                     desktopNotif ? "bg-primary" : "bg-muted"
                   }`}
@@ -238,11 +288,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-foreground">Sound Alerts</div>
+                  <div className="text-sm text-foreground">Sound</div>
                   <div className="text-[11px] text-muted-foreground">Play sound when events detected</div>
                 </div>
                 <button
-                  onClick={() => setSoundAlerts(!soundAlerts)}
+                  onClick={handleSoundAlertsToggle}
                   className={`w-10 h-5 rounded-full transition-colors relative ${
                     soundAlerts ? "bg-primary" : "bg-muted"
                   }`}

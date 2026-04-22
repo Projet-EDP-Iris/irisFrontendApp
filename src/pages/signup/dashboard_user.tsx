@@ -169,8 +169,8 @@ export default function IrisDashboard() {
         <div className="absolute bottom-5 right-6 flex items-center gap-2">
           <IrisOrbitLogo />
           <div className="flex flex-col leading-none">
-            <span className="text-xs font-bold tracking-widest" style={{ color: "#D4621A" }}>IRIS</span>
-            <span className="text-xs" style={{ color: "#7A4020", fontSize: 9 }}>v2.1.0</span>
+            <span className="text-xs font-bold" style={{ color: "#D4621A" }}>iris</span>
+            <span className="text-xs" style={{ color: "#7A4020", fontSize: 9 }}>Beta v0.1.0</span>
           </div>
         </div>
 

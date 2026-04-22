@@ -69,13 +69,12 @@ const otherEmails = [
 ];
 
 export default function EmailsPage() {
-  const [activeTab, setActiveTab] = useState<"focused" | "other">("focused");
+  const [activeTab, setActiveTab] = useState("rdv");
   const { isIrisActive } = useAuth();
-  
-  // Only show summarizing indicator if Iris is active
+
   const isSummarizing = isIrisActive;
 
-  const emails = activeTab === "focused" ? focusedEmails : otherEmails;
+  const emails = activeTab === "rdv" ? focusedEmails : activeTab === "action" ? otherEmails : [];
 
   return (
     <div className="flex flex-col h-full">
@@ -100,41 +99,33 @@ export default function EmailsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="px-8 mb-4">
-        <div className="flex gap-2">
+      <div className="flex px-8 mb-5 flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        {[
+          { id: "rdv",       label: "RDV",        count: focusedEmails.length },
+          { id: "action",    label: "Action",     count: otherEmails.length },
+          { id: "attente",   label: "En attente", count: 0 },
+          { id: "bonsplans", label: "Bons plans", count: 0 },
+          { id: "info",      label: "Info",       count: 0 },
+        ].map(t => (
           <button
-            onClick={() => setActiveTab("focused")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              activeTab === "focused"
-                ? "bg-card border border-primary/50 text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
+            style={{
+              color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
+              borderColor: activeTab === t.id ? "#E8842A" : "transparent",
+              background: "transparent",
+              whiteSpace: "nowrap",
+            }}
           >
-            <span>✦</span>
-            <span>Focused</span>
-            <span
-              className={`px-1.5 py-0.5 rounded-md text-xs font-semibold ${
-                activeTab === "focused" ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {focusedEmails.length}
-            </span>
+            {t.label}
+            {t.count > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)", color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)", fontSize: 10 }}>
+                {t.count}
+              </span>
+            )}
           </button>
-          <button
-            onClick={() => setActiveTab("other")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              activeTab === "other"
-                ? "bg-card border border-border text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <span>✉</span>
-            <span>Other</span>
-            <span className="px-1.5 py-0.5 rounded-md text-xs font-semibold bg-muted text-muted-foreground">
-              {otherEmails.length}
-            </span>
-          </button>
-        </div>
+        ))}
       </div>
 
       {/* Email list */}
