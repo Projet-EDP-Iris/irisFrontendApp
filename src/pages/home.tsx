@@ -406,37 +406,33 @@ const InboxView = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-8 mb-5 flex-shrink-0">
-        <button
-          onClick={() => setTab("focused")}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2"
-          style={{
-            color: tab === "focused" ? "#E8842A" : "rgba(255,255,255,0.45)",
-            borderColor: tab === "focused" ? "#E8842A" : "transparent",
-            background: "transparent",
-          }}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          Focused
-          <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ background: "#E8842A", color: "white", fontSize: 10 }}>3</span>
-        </button>
-        <button
-          onClick={() => setTab("other")}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2"
-          style={{
-            color: tab === "other" ? "#E8842A" : "rgba(255,255,255,0.45)",
-            borderColor: tab === "other" ? "#E8842A" : "transparent",
-            background: "transparent",
-          }}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/>
-          </svg>
-          Other
-          <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)", fontSize: 10 }}>3</span>
-        </button>
+      <div className="flex px-8 mb-5 flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        {[
+          { id:"rdv",       label:"RDV",        count: INBOX_DATA.length - scheduled.size },
+          { id:"action",    label:"Action",     count: 0 },
+          { id:"attente",   label:"En attente", count: 0 },
+          { id:"bonsplans", label:"Bons plans", count: 0 },
+          { id:"info",      label:"Info",       count: 0 },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
+            style={{
+              color: tab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
+              borderColor: tab === t.id ? "#E8842A" : "transparent",
+              background: "transparent",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {t.label}
+            {t.count > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ background: tab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)", color: tab === t.id ? "white" : "rgba(255,255,255,0.5)", fontSize: 10 }}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Email list */}
