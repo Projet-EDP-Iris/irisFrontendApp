@@ -28,6 +28,7 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
   );
 }
 
+
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
   const { connected: gmailConnected, gmailEmail, enabled: gmailEnabled, enable: enableGmail, disable: disableGmail } = useGmailConnection();
@@ -199,7 +200,24 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       </div>
                     </div>
                   </div>
-                  <Toggle enabled={gmailEnabled && gmailConnected} onClick={handleGmailToggle} />
+                  {!gmailConnected ? (
+                    <button
+                      onClick={handleGmailToggle}
+                      className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
+                    >
+                      Connect
+                    </button>
+                  ) : gmailEnabled ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="px-2 py-0.5 rounded-full bg-green-500/15 text-green-600 dark:text-green-400 text-[10px] font-semibold">Connected</span>
+                      <button onClick={disableGmail} className="text-[10px] text-muted-foreground hover:text-destructive transition-colors">Disconnect</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-semibold">Disabled</span>
+                      <button onClick={enableGmail} className="text-[10px] text-primary hover:opacity-80 transition-opacity">Enable</button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Google Calendar — static for now */}
@@ -215,7 +233,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       </div>
                     </div>
                   </div>
-                  <Toggle enabled={gmailConnected} onClick={() => {}} disabled />
+                  {gmailConnected ? (
+                    <span className="px-2 py-0.5 rounded-full bg-green-500/15 text-green-600 dark:text-green-400 text-[10px] font-semibold">via Gmail ✓</span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">Requires Gmail</span>
+                  )}
                 </div>
 
                 {/* Outlook — not implemented */}
@@ -231,7 +253,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       <div className="text-[10px] text-muted-foreground">Demo indisponible</div>
                     </div>
                   </div>
-                  <Toggle enabled={false} onClick={() => {}} disabled />
+                  <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">Demo</span>
                 </div>
 
                 {/* Apple Calendar — not implemented */}
@@ -245,7 +267,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       <div className="text-[10px] text-muted-foreground">Demo indisponible</div>
                     </div>
                   </div>
-                  <Toggle enabled={false} onClick={() => {}} disabled />
+                  <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium">Demo</span>
                 </div>
 
               </div>

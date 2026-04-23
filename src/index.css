@@ -259,6 +259,30 @@
   .no-default-hover-elevate {}
   .no-default-active-elevate {}
 
+  .email-card-gmail-hover {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .email-card-gmail-hover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1.5px solid transparent;
+    background: linear-gradient(135deg, #EA4335 0%, #FBBC04 33%, #34A853 66%, #4285F4 100%) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+
+  .email-card-gmail-hover:hover::after {
+    opacity: 1;
+  }
+
   .toggle-elevate::before,
   .toggle-elevate-2::before {
     content: "";
