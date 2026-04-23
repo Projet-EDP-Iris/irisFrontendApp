@@ -21,6 +21,12 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 const queryClient = new QueryClient();
 
+function useNormalizedHashLocation() {
+  const [location, navigate] = useHashLocation();
+  const normalizedLocation = location.split("?")[0] || "/";
+  return [normalizedLocation, navigate] as [string, typeof navigate];
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, isLoading } = useAuth();
   if (isLoading) return null;
@@ -77,7 +83,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <WouterRouter hook={useHashLocation}>
+          <WouterRouter hook={useNormalizedHashLocation}>
             <AuthProvider>
               <Router />
             </AuthProvider>

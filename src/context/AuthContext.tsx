@@ -61,9 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(u);
         setToken(stored);
       })
-      .catch(() => {
-        localStorage.removeItem("iris_token");
-        setToken(null);
+      .catch((error: Error & { status?: number }) => {
+        if (error.status === 401 || error.status === 403) {
+          localStorage.removeItem("iris_token");
+          setToken(null);
+          setUser(null);
+          return;
+        }
+
+        setToken(stored);
       })
       .finally(() => setIsLoading(false));
   }, []);
