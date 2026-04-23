@@ -7,6 +7,10 @@ declare global {
         shown: boolean;
         reason?: string;
       }>;
+      notifyGmailConnected: (payload: { gmailEmail?: string; soundEnabled: boolean }) => Promise<{
+        shown: boolean;
+        reason?: string;
+      }>;
     };
   }
 }

@@ -135,6 +135,27 @@ ipcMain.handle('iris:notify-signup-success', (_event, payload = {}) => {
   return { shown: true }
 })
 
+ipcMain.handle('iris:notify-gmail-connected', (_event, payload = {}) => {
+  if (!Notification.isSupported()) {
+    return { shown: false, reason: 'unsupported' }
+  }
+
+  const gmailEmail = typeof payload.gmailEmail === 'string' ? payload.gmailEmail.trim() : ''
+  const soundEnabled = payload.soundEnabled !== false
+  const body = gmailEmail
+    ? `Connected to ${gmailEmail}. Your inbox is ready in Iris.`
+    : 'Your Gmail account is connected. Your inbox is ready in Iris.'
+
+  const notification = new Notification({
+    title: 'Gmail connected',
+    body,
+    silent: !soundEnabled,
+  })
+
+  notification.show()
+  return { shown: true }
+})
+
 app.whenReady().then(() => {
   createWindow()
 
