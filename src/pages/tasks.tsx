@@ -1,5 +1,6 @@
-import { ChevronRight, MoreHorizontal, Clock, Calendar, AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, MoreHorizontal, Clock, Calendar, AlertTriangle, Trash2, CalendarPlus } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 const tasksData = [
   {
@@ -28,13 +29,58 @@ const tasksData = [
   },
 ];
 
+function buildPlanCalendarUrl(title: string): string {
+  const now = new Date();
+  const start = new Date(now.getTime() + 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: "Bloc de travail planifié via Iris",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState(tasksData);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const acceptTask = (id: number) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, accepted: true } : t))
     );
+    toast({ title: "Tâche acceptée", description: "La tâche a été ajoutée à votre plan." });
+  };
+
+  const deleteTask = (id: number) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setOpenMenuId(null);
+    toast({ title: "Tâche supprimée", description: "La tâche a été retirée de votre liste." });
+  };
+
+  const postponeTask = (id: number) => {
+    setOpenMenuId(null);
+    toast({ title: "Tâche reportée", description: "La tâche sera rappelée demain." });
+  };
+
+  const handlePlan60 = (task: typeof tasksData[0]) => {
+    const url = buildPlanCalendarUrl(task.title);
+    window.open(url, "_blank");
+    toast({ title: "Bloc de 60 min créé", description: "Google Calendar s'ouvre pour confirmer le créneau." });
   };
 
   return (
@@ -53,6 +99,12 @@ export default function TasksPage() {
 
       {/* Task list */}
       <div className="flex-1 overflow-y-auto px-8 space-y-3">
+        {tasks.length === 0 && (
+          <div className="text-center py-16">
+            <Calendar size={36} className="mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">Aucune tâche pour le moment</p>
+          </div>
+        )}
         {tasks.map((task) => (
           <div
             key={task.id}
@@ -81,9 +133,42 @@ export default function TasksPage() {
                   <span className="text-xs text-muted-foreground">{task.source}</span>
                 </div>
               </div>
-              <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors">
-                <MoreHorizontal size={16} />
-              </button>
+
+              {/* Context menu */}
+              <div className="relative" ref={openMenuId === task.id ? menuRef : undefined}>
+                <button
+                  onClick={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {openMenuId === task.id && (
+                  <div className="absolute right-0 top-8 z-20 w-44 rounded-xl border border-border bg-card shadow-lg py-1">
+                    <button
+                      onClick={() => { handlePlan60(task); setOpenMenuId(null); }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                    >
+                      <CalendarPlus size={14} />
+                      Bloquer 60 min
+                    </button>
+                    <button
+                      onClick={() => postponeTask(task.id)}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                    >
+                      <Clock size={14} />
+                      Reporter à demain
+                    </button>
+                    <div className="my-1 h-px bg-border" />
+                    <button
+                      onClick={() => deleteTask(task.id)}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      Supprimer
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Actions */}
@@ -98,7 +183,10 @@ export default function TasksPage() {
               >
                 {task.accepted ? "✓ Accepté" : "Accept plan"}
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-foreground bg-muted hover:bg-accent transition-colors border border-border">
+              <button
+                onClick={() => handlePlan60(task)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-foreground bg-muted hover:bg-accent transition-colors border border-border"
+              >
                 <Clock size={13} />
                 <span>Plan 60 min</span>
               </button>
