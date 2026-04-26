@@ -1,73 +1,117 @@
+import { MoreHorizontal, Calendar, CheckCircle2, Mail } from "lucide-react";
 import { useState, useEffect } from "react";
-import { MoreHorizontal } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmails } from "@/hooks/useEmails";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { apiFetch } from "@/lib/api";
+import { getGmailCallbackParams, clearGmailCallbackStatus } from "@/lib/signupDraft";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
-function getGmailCallbackParams(): { status: "connected" | "error" | null; reason: string | null } {
-  const hash = window.location.hash || "";
-  const queryIndex = hash.indexOf("?");
-  const query = queryIndex >= 0 ? hash.slice(queryIndex + 1) : window.location.search.slice(1);
-  const params = new URLSearchParams(query);
-  const gmail = params.get("gmail");
-  return {
-    status: gmail === "connected" || gmail === "error" ? gmail : null,
-    reason: params.get("gmail_reason"),
-  };
-}
+function buildGoogleCalendarUrl(email: EmailItem): string {
+  // Use the email date as event start (or default to tomorrow 10am)
+  let start: Date;
+  if (email.date) {
+    start = new Date(email.date);
+    if (isNaN(start.getTime())) {
+      start = new Date();
+      start.setDate(start.getDate() + 1);
+      start.setHours(10, 0, 0, 0);
+    }
+  } else {
+    start = new Date();
+    start.setDate(start.getDate() + 1);
+    start.setHours(10, 0, 0, 0);
+  }
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
-function clearGmailCallbackStatus() {
-  const cleanHash = (window.location.hash || "").split("?")[0] || "#/emails";
-  window.history.replaceState({}, "", `${window.location.pathname}${cleanHash}`);
-}
-
-function parseSender(sender: string | null): { name: string; initials: string } {
-  if (!sender) return { name: "Unknown", initials: "?" };
-  const match = sender.match(/^(.*?)\s*<[^>]+>$/);
-  const name = (match ? match[1].trim() : sender) || sender;
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w: string) => w[0]?.toUpperCase() ?? "")
-    .join("");
-  return { name, initials: initials || "?" };
-}
-
-function truncate(text: string, max: number): string {
-  return text.length <= max ? text : text.slice(0, max).trimEnd() + "…";
+  const bodyPreview = email.body?.slice(0, 200) ?? "";
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: email.subject,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: bodyPreview,
+    location: "",
+  });
+  if (email.sender) params.set("add", email.sender);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function EmailCard({ email }: { email: EmailItem }) {
-  const { name, initials } = parseSender(email.sender);
-  const description = truncate(email.body.replace(/\s+/g, " ").trim(), 80);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const subject = email.subject ?? "(Sans objet)";
+  const sender = email.sender ?? "Expéditeur inconnu";
+  const dateStr = email.date
+    ? new Date(email.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  const handleConfirm = () => {
+    const url = buildGoogleCalendarUrl(email);
+    window.open(url, "_blank");
+    setConfirmed(true);
+  };
 
   return (
-    <div className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-card border border-card-border hover:border-primary/30 transition-colors">
-      <div className="w-10 h-10 rounded-full bg-primary/30 flex items-center justify-center flex-shrink-0">
-        <span className="text-xs font-bold text-primary">{initials}</span>
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-sm font-semibold text-foreground">{name}</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-sm text-foreground/90 truncate">{email.subject}</span>
+    <div
+      className={`rounded-2xl border transition-colors ${
+        confirmed ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
+      }`}
+    >
+      <div className="flex items-start gap-3 px-5 pt-4 pb-3">
+        {/* Icon */}
+        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Mail size={14} className="text-primary" />
         </div>
-        <p className="text-xs text-muted-foreground">
-          <span className="text-primary/70">Email</span>
-          {" · "}
-          {description}
-        </p>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground leading-snug truncate">{subject}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                <span className="text-primary/70">{sender}</span>
+                {dateStr && (
+                  <>
+                    {" · "}
+                    {dateStr}
+                  </>
+                )}
+              </p>
+            </div>
+            <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
+              <MoreHorizontal size={16} />
+            </button>
+          </div>
+
+          {/* Body preview */}
+          {email.body && (
+            <p className="text-xs text-muted-foreground/70 mt-1.5 line-clamp-2 leading-relaxed">
+              {email.body.slice(0, 140)}
+            </p>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-          <MoreHorizontal size={16} />
-        </button>
+      {/* Calendar confirmation button */}
+      <div className="px-5 pb-4">
+        {confirmed ? (
+          <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+            <CheckCircle2 size={16} />
+            <span>RDV ajouté à Google Calendar ✓</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
+          >
+            <Calendar size={15} />
+            <span>Confirmer ce RDV dans Google Calendar</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -134,6 +178,9 @@ export default function EmailsPage() {
     }
   }
 
+  // Pending appointments count (all RDV emails = appointments to confirm)
+  const pendingCount = emails?.length ?? 0;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -166,6 +213,19 @@ export default function EmailsPage() {
           }`}
         >
           {statusMsg.text}
+        </div>
+      )}
+
+      {/* Pending appointments banner */}
+      {gmailEnabled && gmailConnected && pendingCount > 0 && (
+        <div className="mx-8 mb-3 px-4 py-2.5 rounded-xl text-sm font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
+          <Calendar size={15} />
+          <span>
+            {pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer dans Google Calendar
+          </span>
+          <span className="ml-auto px-2 py-0.5 rounded-full bg-primary text-white text-xs font-bold">
+            {pendingCount}
+          </span>
         </div>
       )}
 
