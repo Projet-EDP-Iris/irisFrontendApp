@@ -1,16 +1,46 @@
-import { MoreHorizontal, Calendar, CheckCircle2, Mail } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmails } from "@/hooks/useEmails";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
+import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { apiFetch } from "@/lib/api";
-import { getGmailCallbackParams, clearGmailCallbackStatus } from "@/lib/signupDraft";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
-function buildGoogleCalendarUrl(email: EmailItem): string {
-  // Use the email date as event start (or default to tomorrow 10am)
+// ---------------------------------------------------------------------------
+// OAuth callback helpers (inline — reads URL hash/query params after redirect)
+// ---------------------------------------------------------------------------
+
+function getOAuthCallbackParams(): {
+  gmail: "connected" | "error" | null;
+  outlook: "success" | "error" | null;
+  reason: string | null;
+} {
+  const hash = window.location.hash || "";
+  const queryIndex = hash.indexOf("?");
+  const query = queryIndex >= 0 ? hash.slice(queryIndex + 1) : window.location.search.slice(1);
+  const params = new URLSearchParams(query);
+  const gmail = params.get("gmail");
+  const outlook = params.get("outlook");
+  return {
+    gmail: gmail === "connected" || gmail === "error" ? gmail : null,
+    outlook: outlook === "success" || outlook === "error" ? outlook : null,
+    reason: params.get("gmail_reason") ?? params.get("outlook_reason"),
+  };
+}
+
+function clearCallbackParams() {
+  const cleanHash = (window.location.hash || "").split("?")[0] || "#/emails";
+  window.history.replaceState({}, "", `${window.location.pathname}${cleanHash}`);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function buildCalendarUrl(email: EmailItem): string {
   let start: Date;
   if (email.date) {
     start = new Date(email.date);
@@ -26,18 +56,19 @@ function buildGoogleCalendarUrl(email: EmailItem): string {
   }
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-
-  const bodyPreview = email.body?.slice(0, 200) ?? "";
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: email.subject,
     dates: `${fmt(start)}/${fmt(end)}`,
-    details: bodyPreview,
-    location: "",
+    details: email.body?.slice(0, 200) ?? "",
   });
   if (email.sender) params.set("add", email.sender);
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// EmailCard
+// ---------------------------------------------------------------------------
 
 function EmailCard({ email }: { email: EmailItem }) {
   const [confirmed, setConfirmed] = useState(false);
@@ -49,8 +80,7 @@ function EmailCard({ email }: { email: EmailItem }) {
     : null;
 
   const handleConfirm = () => {
-    const url = buildGoogleCalendarUrl(email);
-    window.open(url, "_blank");
+    window.open(buildCalendarUrl(email), "_blank");
     setConfirmed(true);
   };
 
@@ -117,68 +147,110 @@ function EmailCard({ email }: { email: EmailItem }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
 export default function EmailsPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("rdv");
-  const [connecting, setConnecting] = useState(false);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
   const { isIrisActive } = useAuth();
+
   const {
     connected: gmailConnected,
     enabled: gmailEnabled,
-    isLoading: statusLoading,
-    error: statusError,
-    refetchStatus,
+    isLoading: gmailStatusLoading,
+    error: gmailStatusError,
+    refetchStatus: refetchGmail,
   } = useGmailConnection();
-  const { data: emails, isLoading, error } = useEmails(20, gmailEnabled && gmailConnected);
 
+  const {
+    connected: outlookConnected,
+    isLoading: outlookStatusLoading,
+    refetchStatus: refetchOutlook,
+  } = useOutlookConnection();
+
+  // Fetch emails when at least one provider is active
+  const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
+  const { data: emails, isLoading, error } = useEmails(20, anyConnected);
+
+  // Handle OAuth callbacks
   useEffect(() => {
-    const { status: gmail, reason } = getGmailCallbackParams();
-    if (!gmail) return;
-
-    clearGmailCallbackStatus();
+    const { gmail, outlook, reason } = getOAuthCallbackParams();
+    if (!gmail && !outlook) return;
+    clearCallbackParams();
 
     if (gmail === "error") {
       const devSuffix = import.meta.env.DEV && reason ? ` (${reason})` : "";
       setStatusMsg({ text: `Gmail connection failed. Please try again.${devSuffix}`, ok: false });
       return;
     }
+    if (outlook === "error") {
+      const devSuffix = import.meta.env.DEV && reason ? ` (${reason})` : "";
+      setStatusMsg({ text: `Outlook connection failed. Please try again.${devSuffix}`, ok: false });
+      return;
+    }
 
-    localStorage.setItem("gmail_enabled", "true");
-    setStatusMsg({ text: "Gmail connected! Your emails are loading…", ok: true });
+    if (gmail === "connected") {
+      localStorage.setItem("gmail_enabled", "true");
+      setStatusMsg({ text: "Gmail connecté ! Vos emails se chargent…", ok: true });
+      void (async () => {
+        const statusResult = await refetchGmail();
+        if (statusResult.data?.connected) {
+          await notifyGmailConnected({ gmailEmail: statusResult.data.gmail_email });
+          await queryClient.invalidateQueries({ queryKey: ["emails"] });
+        } else {
+          setStatusMsg({ text: "Gmail lié, mais Iris n'a pas pu confirmer la boîte. Actualisez une fois.", ok: false });
+        }
+      })();
+    }
 
-    void (async () => {
-      const statusResult = await refetchStatus();
-
-      if (statusResult.data?.connected) {
-        await notifyGmailConnected({ gmailEmail: statusResult.data.gmail_email });
+    if (outlook === "success") {
+      setStatusMsg({ text: "Outlook connecté ! Vos emails se chargent…", ok: true });
+      void (async () => {
+        await refetchOutlook();
         await queryClient.invalidateQueries({ queryKey: ["emails"] });
-        return;
-      }
+      })();
+    }
+  }, [queryClient, refetchGmail, refetchOutlook]);
 
-      setStatusMsg({ text: "Gmail linked, but Iris could not confirm the inbox yet. Please refresh once.", ok: false });
-    })();
-  }, [queryClient, refetchStatus]);
-
-  // Show connect CTA when: status says not connected, OR emails endpoint says not connected (404)
   const emailErrorStatus = (error as Error & { status?: number } | null)?.status;
-  const statusErrorStatus = (statusError as Error & { status?: number } | null)?.status;
-  const isGmailNotConnected =
-    (!statusLoading && !gmailConnected && statusErrorStatus !== 401 && statusErrorStatus !== 403) ||
-    (emailErrorStatus === 404 && !gmailConnected);
+  const gmailStatusErrorStatus = (gmailStatusError as Error & { status?: number } | null)?.status;
+  const isSessionExpired = gmailStatusErrorStatus === 401 || gmailStatusErrorStatus === 403;
+  const noProviderConnected =
+    !gmailStatusLoading &&
+    !outlookStatusLoading &&
+    !gmailConnected &&
+    !outlookConnected &&
+    !isSessionExpired &&
+    emailErrorStatus !== 200;
 
   async function handleConnectGmail() {
-    setConnecting(true);
+    setConnectingGmail(true);
     try {
       const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google");
       window.location.href = auth_url;
     } catch {
-      setStatusMsg({ text: "Could not start Gmail connection. Check backend config.", ok: false });
-      setConnecting(false);
+      setStatusMsg({ text: "Impossible de démarrer la connexion Gmail. Vérifiez la config backend.", ok: false });
+      setConnectingGmail(false);
     }
   }
 
-  // Pending appointments count (all RDV emails = appointments to confirm)
+  async function handleConnectOutlook() {
+    setConnectingOutlook(true);
+    try {
+      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
+      window.location.href = auth_url;
+    } catch {
+      setStatusMsg({ text: "Impossible de démarrer la connexion Outlook. Vérifiez la config backend.", ok: false });
+      setConnectingOutlook(false);
+    }
+  }
+
   const pendingCount = emails?.length ?? 0;
 
   return (
@@ -187,12 +259,20 @@ export default function EmailsPage() {
       <div className="flex items-center justify-between px-8 pt-8 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Emails</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">From your Gmail inbox</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {gmailConnected && outlookConnected
+              ? "Gmail + Outlook"
+              : gmailConnected
+              ? "Gmail"
+              : outlookConnected
+              ? "Outlook"
+              : "Connectez une boîte mail"}
+          </p>
         </div>
         {isIrisActive ? (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card">
             <span className="text-xs text-primary">✦</span>
-            <span className="text-sm text-muted-foreground">Iris is summarizing your emails...</span>
+            <span className="text-sm text-muted-foreground">Iris analyse vos emails...</span>
             <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
@@ -217,12 +297,10 @@ export default function EmailsPage() {
       )}
 
       {/* Pending appointments banner */}
-      {gmailEnabled && gmailConnected && pendingCount > 0 && (
+      {anyConnected && pendingCount > 0 && (
         <div className="mx-8 mb-3 px-4 py-2.5 rounded-xl text-sm font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
           <Calendar size={15} />
-          <span>
-            {pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer dans Google Calendar
-          </span>
+          <span>{pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer dans Google Calendar</span>
           <span className="ml-auto px-2 py-0.5 rounded-full bg-primary text-white text-xs font-bold">
             {pendingCount}
           </span>
@@ -235,11 +313,11 @@ export default function EmailsPage() {
         style={{ borderColor: "rgba(255,255,255,0.07)" }}
       >
         {[
-          { id: "rdv",       label: "RDV",        count: emails?.length ?? 0 },
-          { id: "action",    label: "Action",     count: 0 },
-          { id: "attente",   label: "En attente", count: 0 },
+          { id: "rdv", label: "RDV", count: emails?.length ?? 0 },
+          { id: "action", label: "Action", count: 0 },
+          { id: "attente", label: "En attente", count: 0 },
           { id: "bonsplans", label: "Bons plans", count: 0 },
-          { id: "info",      label: "Info",       count: 0 },
+          { id: "info", label: "Info", count: 0 },
         ].map((t) => (
           <button
             key={t.id}
@@ -271,67 +349,126 @@ export default function EmailsPage() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-8 space-y-3">
-        {/* Gmail disabled by the user */}
-        {!gmailEnabled && (
+
+        {/* No provider connected → big CTA with both options */}
+        {noProviderConnected && (
+          <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl">
+              ✉️
+            </div>
+            <div>
+              <p className="text-foreground font-semibold text-lg mb-1">
+                Connectez votre boîte mail
+              </p>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Iris lit vos emails et détecte automatiquement les rendez-vous pour alléger votre charge mentale.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <button
+                onClick={handleConnectGmail}
+                disabled={connectingGmail}
+                className="flex items-center justify-center gap-2.5 w-full px-6 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                <Mail size={16} />
+                {connectingGmail ? "Redirection…" : "Connecter Gmail"}
+              </button>
+              <button
+                onClick={handleConnectOutlook}
+                disabled={connectingOutlook}
+                className="flex items-center justify-center gap-2.5 w-full px-6 py-3 rounded-xl border border-border bg-card text-foreground text-sm font-semibold hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
+                  <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
+                  <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
+                  <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
+                </svg>
+                {connectingOutlook ? "Redirection…" : "Connecter Outlook"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Gmail disabled */}
+        {!noProviderConnected && !gmailEnabled && !outlookConnected && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <p className="text-muted-foreground text-sm">Gmail is turned off.</p>
-            <p className="text-xs text-muted-foreground/60">Enable it in Settings → Services connectés.</p>
+            <p className="text-muted-foreground text-sm">Gmail est désactivé.</p>
+            <p className="text-xs text-muted-foreground/60">Activez-le dans Paramètres → Services connectés.</p>
           </div>
         )}
 
         {/* Loading */}
-        {gmailEnabled && isLoading && (
+        {anyConnected && isLoading && (
           <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Loading your emails…</span>
+            <span className="text-sm">Chargement de vos emails…</span>
           </div>
         )}
 
-        {/* Gmail not connected */}
-        {isGmailNotConnected && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">
-              ✉️
-            </div>
-            <div>
-              <p className="text-foreground font-semibold mb-1">Connect your Gmail</p>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Link your Gmail account so Iris can read your emails and help you manage meetings.
-              </p>
-            </div>
-            <button
-              onClick={handleConnectGmail}
-              disabled={connecting}
-              className="px-6 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {connecting ? "Redirecting…" : "Connect Gmail"}
-            </button>
-          </div>
-        )}
-
-        {/* Other errors */}
-        {error && !isGmailNotConnected && (
+        {/* Session expired */}
+        {isSessionExpired && (
           <div className="text-center py-16 text-red-400 text-sm">
-            Failed to load emails. Please try again later.
+            Votre session Iris a expiré. Reconnectez-vous pour relier Gmail.
           </div>
         )}
 
-        {statusErrorStatus && (statusErrorStatus === 401 || statusErrorStatus === 403) && (
+        {/* Fetch error (not "no provider") */}
+        {error && !noProviderConnected && emailErrorStatus !== 404 && (
           <div className="text-center py-16 text-red-400 text-sm">
-            Your Iris session expired. Please log in again to reconnect Gmail.
+            Erreur de chargement des emails. Réessayez plus tard.
+          </div>
+        )}
+
+        {/* Empty inbox */}
+        {anyConnected && !isLoading && emails && emails.length === 0 && (
+          <div className="text-center py-16 text-muted-foreground text-sm">
+            Aucun email trouvé dans votre boîte.
           </div>
         )}
 
         {/* Email list */}
-        {emails && emails.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground">
-            No emails found in your inbox.
+        {activeTab === "rdv" && emails?.map((email) => (
+          <EmailCard key={email.message_id ?? email.subject} email={email} />
+        ))}
+
+        {/* "Connect Outlook too" nudge — shown when only Gmail is connected */}
+        {gmailConnected && !outlookConnected && !noProviderConnected && (
+          <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
+            <Plug size={16} className="text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">
+                Vous utilisez aussi Outlook ?{" "}
+                <button
+                  onClick={handleConnectOutlook}
+                  disabled={connectingOutlook}
+                  className="text-primary font-semibold hover:underline disabled:opacity-50"
+                >
+                  {connectingOutlook ? "Redirection…" : "Connecter Outlook →"}
+                </button>
+              </p>
+            </div>
           </div>
         )}
 
-        {activeTab === "rdv" && emails?.map((email) => (
-          <EmailCard key={email.message_id} email={email} />
-        ))}
+        {/* "Connect Gmail too" nudge — shown when only Outlook is connected */}
+        {outlookConnected && !gmailConnected && !noProviderConnected && (
+          <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
+            <Plug size={16} className="text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">
+                Vous utilisez aussi Gmail ?{" "}
+                <button
+                  onClick={handleConnectGmail}
+                  disabled={connectingGmail}
+                  className="text-primary font-semibold hover:underline disabled:opacity-50"
+                >
+                  {connectingGmail ? "Redirection…" : "Connecter Gmail →"}
+                </button>
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
