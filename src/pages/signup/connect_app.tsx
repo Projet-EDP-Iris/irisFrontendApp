@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
 import { getSignupDraft } from "@/lib/signupDraft";
 import emailOverloadVisual from "@/assets/email-overload-visual.svg";
 
@@ -15,33 +16,23 @@ function validatePasswordPolicy(password: string): string | null {
 }
 
 const APPS = [
-  { id: "gmail", label: "Gmail" },
-  { id: "gcal", label: "Google Calendar" },
-  { id: "outlook", label: "Outlook Email" },
-  { id: "ocal", label: "Outlook Calendar" },
-  { id: "apple", label: "Apple iCal" },
-];
+  { id: "gmail",   label: "Gmail",            authPath: "/auth/google" },
+  { id: "gcal",    label: "Google Calendar",   authPath: "/auth/google" },
+  { id: "outlook", label: "Outlook Email",     authPath: "/auth/microsoft" },
+  { id: "ocal",    label: "Outlook Calendar",  authPath: "/auth/microsoft" },
+  { id: "apple",   label: "Apple iCal",        authPath: null }, // CalDAV — manual setup after signup
+] as const;
 
 export default function IrisConnectApps() {
   const draft = useMemo(() => getSignupDraft(), []);
-  const [connected, setConnected] = useState(new Set<string>());
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const { signup } = useAuth();
   const [_, navigate] = useLocation();
 
-  const toggle = (id: string) => {
-    setConnected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const createAccount = async () => {
-    if (isLoading) return false;
-    setError(null);
+  const ensureAccount = async (): Promise<boolean> => {
+    if (accountCreated) return true;
     if (!draft.email || !draft.password || !draft.name || !draft.profile_icon) {
       setError("Le parcours d'inscription est incomplet. Reprenez depuis le debut.");
       return false;
@@ -51,8 +42,6 @@ export default function IrisConnectApps() {
       setError(passwordError);
       return false;
     }
-
-    setIsLoading(true);
     try {
       await signup({
         email: draft.email,
@@ -60,25 +49,53 @@ export default function IrisConnectApps() {
         name: draft.name,
         profile_icon: draft.profile_icon,
       });
+      setAccountCreated(true);
       return true;
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Echec de creation du compte";
-      setError(message);
-      setIsLoading(false);
+      setError(e instanceof Error ? e.message : "Echec de creation du compte");
       return false;
     }
   };
 
-  const skipAndConnectLater = async () => {
-    const ok = await createAccount();
-    if (ok) navigate("/home");
+  const handleConnect = async (appId: string, authPath: string | null) => {
+    if (connectingApp) return;
+    setError(null);
+    setConnectingApp(appId);
+
+    const ok = await ensureAccount();
+    if (!ok) {
+      setConnectingApp(null);
+      return;
+    }
+
+    if (!authPath) {
+      // Apple CalDAV — no OAuth redirect; account is created, send to home
+      navigate("/home");
+      return;
+    }
+
+    try {
+      const data = await apiFetch<{ auth_url: string }>(authPath);
+      // Redirect the whole browser to the OAuth consent page.
+      // After granting access, the provider redirects to our callback which
+      // then bounces back to the frontend /emails page with ?gmail=connected
+      // (or ?outlook=success), where the existing callback handler takes over.
+      window.location.href = data.auth_url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impossible de démarrer la connexion. Réessayez.");
+      setConnectingApp(null);
+    }
   };
 
-  const continueWithConnections = async () => {
-    if (connected.size === 0) return;
-    const ok = await createAccount();
+  const skipAndConnectLater = async () => {
+    if (connectingApp) return;
+    setConnectingApp("skip");
+    const ok = await ensureAccount();
     if (ok) navigate("/home");
+    else setConnectingApp(null);
   };
+
+  const isLoading = connectingApp !== null;
 
   return (
     <div className="min-h-screen h-screen flex overflow-hidden">
@@ -96,18 +113,30 @@ export default function IrisConnectApps() {
 
         <div className="flex-1 flex flex-col gap-2 min-h-0">
           {APPS.map((app) => {
-            const isConnected = connected.has(app.id);
+            const busy = connectingApp === app.id;
             return (
               <button
                 key={app.id}
-                onClick={() => toggle(app.id)}
-                className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
-                  isConnected ? "bg-green-50 border-green-300" : "bg-white border-gray-200"
+                onClick={() => handleConnect(app.id, app.authPath)}
+                disabled={isLoading}
+                className={`w-full text-left px-4 py-3 rounded-xl border transition-all disabled:cursor-not-allowed ${
+                  busy ? "bg-orange-50 border-orange-300" : "bg-white border-gray-200 hover:border-orange-200"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-800">{app.label}</span>
-                  <span className="text-xs text-gray-400">{isConnected ? "Connected" : "Connect"}</span>
+                  <span className="text-xs text-gray-400">
+                    {busy ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-block w-3 h-3 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin" />
+                        Connexion…
+                      </span>
+                    ) : app.authPath === null ? (
+                      "Config. après inscription"
+                    ) : (
+                      "Connecter →"
+                    )}
+                  </span>
                 </div>
               </button>
             );
@@ -122,7 +151,7 @@ export default function IrisConnectApps() {
             color: "#ea580c",
           }}
         >
-          {connected.size} service{connected.size === 1 ? "" : "s"} connected
+          Cliquez sur un service pour démarrer la connexion OAuth
         </div>
 
         <div className="flex gap-3 mt-4">
@@ -131,21 +160,7 @@ export default function IrisConnectApps() {
             disabled={isLoading}
             className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 disabled:opacity-60"
           >
-            Connect later
-          </button>
-          <button
-            onClick={continueWithConnections}
-            disabled={isLoading || connected.size === 0}
-            className="flex-1 py-3 rounded-xl text-white font-semibold transition-all disabled:cursor-not-allowed disabled:shadow-none"
-            style={{
-              background:
-                isLoading || connected.size === 0
-                  ? "linear-gradient(90deg, #d6d3d1, #e7e5e4)"
-                  : "linear-gradient(90deg,#FF5722,#FF8C42)",
-              color: isLoading || connected.size === 0 ? "#78716c" : "#ffffff",
-            }}
-          >
-            {isLoading ? "Creation..." : "Continuer"}
+            {connectingApp === "skip" ? "Création…" : "Connect later"}
           </button>
         </div>
         {error && <p className="text-sm text-red-500 mt-2">{error}</p>}

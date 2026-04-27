@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug } from "lucide-react";
+import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmails } from "@/hooks/useEmails";
@@ -72,22 +72,129 @@ function buildCalendarUrl(email: EmailItem): string {
 
 function EmailCard({ email }: { email: EmailItem }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  const category = email.category ?? "info";
   const subject = email.subject ?? "(Sans objet)";
   const sender = email.sender ?? "Expéditeur inconnu";
   const dateStr = email.date
     ? new Date(email.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
 
-  const handleConfirm = () => {
-    window.open(buildCalendarUrl(email), "_blank");
-    setConfirmed(true);
+  const handleConfirm = async () => {
+    if (!email.db_id) {
+      window.open(buildCalendarUrl(email), "_blank");
+      setConfirmed(true);
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiFetch(`/calendar/confirm/${email.db_id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot_index: 0 }),
+      });
+      setConfirmed(true);
+    } catch (err) {
+      console.error("Calendar confirm failed:", err);
+      setConfirmed(true);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  function renderActionButton() {
+    // RDV — calendar confirm (original behaviour)
+    if (category === "rdv") {
+      if (confirmed) {
+        return (
+          <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+            <CheckCircle2 size={16} />
+            <span>RDV ajouté à Google Calendar ✓</span>
+          </div>
+        );
+      }
+      return (
+        <button
+          onClick={handleConfirm}
+          disabled={loading}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+          style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
+        >
+          {loading ? (
+            <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+          ) : (
+            <Calendar size={15} />
+          )}
+          <span>{loading ? "Ajout en cours…" : "Confirmer ce RDV dans Google Calendar"}</span>
+        </button>
+      );
+    }
+
+    // Shared "done" state for all non-RDV categories
+    if (done) {
+      return (
+        <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+          <CheckCircle2 size={16} />
+          <span>Fait ✓</span>
+        </div>
+      );
+    }
+
+    if (category === "action") {
+      return (
+        <button
+          onClick={() => setDone(true)}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+          style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
+        >
+          <Zap size={15} />
+          <span>Marquer comme traité</span>
+        </button>
+      );
+    }
+
+    if (category === "attente") {
+      return (
+        <button
+          onClick={() => setDone(true)}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground transition-all hover:bg-accent active:scale-[0.98]"
+        >
+          <Clock size={15} />
+          <span>Envoyer un rappel</span>
+        </button>
+      );
+    }
+
+    if (category === "bonsplans") {
+      return (
+        <button
+          onClick={() => setDone(true)}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground transition-all hover:bg-accent active:scale-[0.98]"
+        >
+          <Tag size={15} />
+          <span>Voir l'offre</span>
+        </button>
+      );
+    }
+
+    // info (default)
+    return (
+      <button
+        onClick={() => setDone(true)}
+        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-muted/30 text-muted-foreground transition-all hover:bg-accent active:scale-[0.98]"
+      >
+        <BookOpen size={15} />
+        <span>Marquer comme lu</span>
+      </button>
+    );
+  }
 
   return (
     <div
       className={`rounded-2xl border transition-colors ${
-        confirmed ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
+        confirmed || done ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
       }`}
     >
       <div className="flex items-start gap-3 px-5 pt-4 pb-3">
@@ -125,23 +232,9 @@ function EmailCard({ email }: { email: EmailItem }) {
         </div>
       </div>
 
-      {/* Calendar confirmation button */}
+      {/* Category action button */}
       <div className="px-5 pb-4">
-        {confirmed ? (
-          <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-            <CheckCircle2 size={16} />
-            <span>RDV ajouté à Google Calendar ✓</span>
-          </div>
-        ) : (
-          <button
-            onClick={handleConfirm}
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
-          >
-            <Calendar size={15} />
-            <span>Confirmer ce RDV dans Google Calendar</span>
-          </button>
-        )}
+        {renderActionButton()}
       </div>
     </div>
   );
@@ -251,7 +344,7 @@ export default function EmailsPage() {
     }
   }
 
-  const pendingCount = emails?.length ?? 0;
+  const pendingCount = emails?.filter((e) => (e.category ?? "info") === "rdv").length ?? 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -308,44 +401,56 @@ export default function EmailsPage() {
       )}
 
       {/* Tabs */}
-      <div
-        className="flex px-8 mb-5 flex-shrink-0 border-b"
-        style={{ borderColor: "rgba(255,255,255,0.07)" }}
-      >
-        {[
-          { id: "rdv", label: "RDV", count: emails?.length ?? 0 },
-          { id: "action", label: "Action", count: 0 },
-          { id: "attente", label: "En attente", count: 0 },
-          { id: "bonsplans", label: "Bons plans", count: 0 },
-          { id: "info", label: "Info", count: 0 },
-        ].map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
-            style={{
-              color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
-              borderColor: activeTab === t.id ? "#E8842A" : "transparent",
-              background: "transparent",
-              whiteSpace: "nowrap",
-            }}
+      {(() => {
+        const tabDef = [
+          { id: "rdv",       label: "RDV" },
+          { id: "action",    label: "Action" },
+          { id: "attente",   label: "En attente" },
+          { id: "bonsplans", label: "Bons plans" },
+          { id: "info",      label: "Info" },
+        ] as const;
+        const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
+        if (emails) {
+          for (const e of emails) {
+            const cat = e.category ?? "info";
+            tabCounts[cat in tabCounts ? cat : "info"]++;
+          }
+        }
+        return (
+          <div
+            className="flex px-8 mb-5 flex-shrink-0 border-b"
+            style={{ borderColor: "rgba(255,255,255,0.07)" }}
           >
-            {t.label}
-            {t.count > 0 && (
-              <span
-                className="px-1.5 py-0.5 rounded-full text-xs font-bold"
+            {tabDef.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
                 style={{
-                  background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)",
-                  color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)",
-                  fontSize: 10,
+                  color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
+                  borderColor: activeTab === t.id ? "#E8842A" : "transparent",
+                  background: "transparent",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+                {t.label}
+                {tabCounts[t.id] > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-bold"
+                    style={{
+                      background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)",
+                      color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)",
+                      fontSize: 10,
+                    }}
+                  >
+                    {tabCounts[t.id]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-8 space-y-3">
@@ -427,10 +532,12 @@ export default function EmailsPage() {
           </div>
         )}
 
-        {/* Email list */}
-        {activeTab === "rdv" && emails?.map((email) => (
-          <EmailCard key={email.message_id ?? email.subject} email={email} />
-        ))}
+        {/* Email list — filtered by active tab */}
+        {emails
+          ?.filter((e) => (e.category ?? "info") === activeTab)
+          .map((email) => (
+            <EmailCard key={email.message_id ?? email.subject} email={email} />
+          ))}
 
         {/* "Connect Outlook too" nudge — shown when only Gmail is connected */}
         {gmailConnected && !outlookConnected && !noProviderConnected && (
