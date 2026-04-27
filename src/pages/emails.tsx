@@ -40,22 +40,6 @@ function clearCallbackParams() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseSender(sender: string | null): { name: string; initials: string } {
-  if (!sender) return { name: "Unknown", initials: "?" };
-  const match = sender.match(/^(.*?)\s*<[^>]+>$/);
-  const name = (match ? match[1].trim() : sender) || sender;
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w: string) => w[0]?.toUpperCase() ?? "")
-    .join("");
-  return { name, initials: initials || "?" };
-}
-
-function truncate(text: string, max: number): string {
-  return text.length <= max ? text : text.slice(0, max).trimEnd() + "…";
-}
-
 function buildCalendarUrl(email: EmailItem): string {
   let start: Date;
   if (email.date) {
@@ -88,8 +72,12 @@ function buildCalendarUrl(email: EmailItem): string {
 
 function EmailCard({ email }: { email: EmailItem }) {
   const [confirmed, setConfirmed] = useState(false);
-  const { name, initials } = parseSender(email.sender);
-  const description = truncate(email.body.replace(/\s+/g, " ").trim(), 80);
+
+  const subject = email.subject ?? "(Sans objet)";
+  const sender = email.sender ?? "Expéditeur inconnu";
+  const dateStr = email.date
+    ? new Date(email.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null;
 
   const handleConfirm = () => {
     window.open(buildCalendarUrl(email), "_blank");
@@ -102,36 +90,46 @@ function EmailCard({ email }: { email: EmailItem }) {
         confirmed ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
       }`}
     >
-      <div className="flex items-center gap-4 px-5 pt-4 pb-3">
-        <div className="w-10 h-10 rounded-full bg-primary/30 flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-bold text-primary">{initials}</span>
+      <div className="flex items-start gap-3 px-5 pt-4 pb-3">
+        {/* Icon */}
+        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Mail size={14} className="text-primary" />
         </div>
 
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-semibold text-foreground">{name}</span>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-sm text-foreground/90 truncate">{email.subject}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground leading-snug truncate">{subject}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                <span className="text-primary/70">{sender}</span>
+                {dateStr && (
+                  <>
+                    {" · "}
+                    {dateStr}
+                  </>
+                )}
+              </p>
+            </div>
+            <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
+              <MoreHorizontal size={16} />
+            </button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            <span className="text-primary/70">Email</span>
-            {" · "}
-            {description}
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <MoreHorizontal size={16} />
-          </button>
+          {/* Body preview */}
+          {email.body && (
+            <p className="text-xs text-muted-foreground/70 mt-1.5 line-clamp-2 leading-relaxed">
+              {email.body.slice(0, 140)}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Calendar confirmation */}
+      {/* Calendar confirmation button */}
       <div className="px-5 pb-4">
         {confirmed ? (
           <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-            <CheckCircle2 size={15} />
+            <CheckCircle2 size={16} />
             <span>RDV ajouté à Google Calendar ✓</span>
           </div>
         ) : (
@@ -140,7 +138,7 @@ function EmailCard({ email }: { email: EmailItem }) {
             className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
             style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
           >
-            <Calendar size={14} />
+            <Calendar size={15} />
             <span>Confirmer ce RDV dans Google Calendar</span>
           </button>
         )}
