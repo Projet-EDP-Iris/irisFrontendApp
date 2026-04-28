@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
-import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen,
+  X, ArrowLeft,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
-import { useEmails } from "@/hooks/useEmails";
+import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { apiFetch } from "@/lib/api";
@@ -10,14 +13,10 @@ import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
 // ---------------------------------------------------------------------------
-// OAuth callback helpers (inline — reads URL hash/query params after redirect)
+// OAuth callback helpers
 // ---------------------------------------------------------------------------
 
-function getOAuthCallbackParams(): {
-  gmail: "connected" | "error" | null;
-  outlook: "success" | "error" | null;
-  reason: string | null;
-} {
+function getOAuthCallbackParams() {
   const hash = window.location.hash || "";
   const queryIndex = hash.indexOf("?");
   const query = queryIndex >= 0 ? hash.slice(queryIndex + 1) : window.location.search.slice(1);
@@ -44,205 +43,265 @@ function buildCalendarUrl(email: EmailItem): string {
   let start: Date;
   if (email.date) {
     start = new Date(email.date);
-    if (isNaN(start.getTime())) {
-      start = new Date();
-      start.setDate(start.getDate() + 1);
-      start.setHours(10, 0, 0, 0);
-    }
+    if (isNaN(start.getTime())) { start = new Date(); start.setDate(start.getDate() + 1); start.setHours(10, 0, 0, 0); }
   } else {
-    start = new Date();
-    start.setDate(start.getDate() + 1);
-    start.setHours(10, 0, 0, 0);
+    start = new Date(); start.setDate(start.getDate() + 1); start.setHours(10, 0, 0, 0);
   }
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: email.subject,
-    dates: `${fmt(start)}/${fmt(end)}`,
-    details: email.body?.slice(0, 200) ?? "",
-  });
-  if (email.sender) params.set("add", email.sender);
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  const p = new URLSearchParams({ action: "TEMPLATE", text: email.subject, dates: `${fmt(start)}/${fmt(end)}`, details: email.body?.slice(0, 200) ?? "" });
+  if (email.sender) p.set("add", email.sender);
+  return `https://calendar.google.com/calendar/render?${p}`;
+}
+
+function fmtDate(dateStr: string | null, long = false) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  if (long) return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function cardClass(provider?: string) {
+  if (provider === "gmail") return "email-card-gmail";
+  if (provider === "outlook") return "email-card-outlook";
+  return "email-card-default";
 }
 
 // ---------------------------------------------------------------------------
-// EmailCard
+// Email Detail Side Panel
 // ---------------------------------------------------------------------------
 
-function EmailCard({ email }: { email: EmailItem }) {
+function EmailPanel({
+  email,
+  onClose,
+}: {
+  email: EmailItem;
+  onClose: () => void;
+}) {
+  const [body, setBody] = useState<string | null>(null);
+  const [bodyLoading, setBodyLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const category = email.category ?? "info";
-  const subject = email.subject ?? "(Sans objet)";
-  const sender = email.sender ?? "Expéditeur inconnu";
-  const dateStr = email.date
-    ? new Date(email.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-    : null;
+  const dateStr = fmtDate(email.date, true);
+
+  // For Gmail: fetch full body on open. Outlook already has full body.
+  useEffect(() => {
+    if (!email.message_id) { setBody(email.body || ""); return; }
+    if (email.provider === "gmail") {
+      setBodyLoading(true);
+      apiFetch<{ body: string }>(`/emails/body/${email.message_id}?provider=gmail`)
+        .then((r) => setBody(r.body))
+        .catch(() => setBody(email.body || ""))
+        .finally(() => setBodyLoading(false));
+    } else {
+      setBody(email.body || "");
+    }
+  }, [email.message_id, email.provider, email.body]);
 
   const handleConfirm = async () => {
-    if (!email.db_id) {
-      window.open(buildCalendarUrl(email), "_blank");
-      setConfirmed(true);
-      return;
-    }
+    if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
     setLoading(true);
     try {
-      await apiFetch(`/calendar/confirm/${email.db_id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_index: 0 }),
-      });
+      await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0 }) });
       setConfirmed(true);
-    } catch (err) {
-      console.error("Calendar confirm failed:", err);
-      setConfirmed(true);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setConfirmed(true); }
+    finally { setLoading(false); }
   };
 
-  function renderActionButton() {
-    // RDV — calendar confirm (original behaviour)
+  const providerLabel = email.provider === "gmail" ? "Gmail" : email.provider === "outlook" ? "Outlook" : null;
+  const accentColor = email.provider === "outlook" ? "#0078D4" : email.provider === "gmail" ? "#4285F4" : "#E8842A";
+
+  function renderAction() {
     if (category === "rdv") {
-      if (confirmed) {
-        return (
-          <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-            <CheckCircle2 size={16} />
-            <span>RDV ajouté à Google Calendar ✓</span>
-          </div>
-        );
-      }
+      if (confirmed) return <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold"><CheckCircle2 size={16}/><span>RDV ajouté ✓</span></div>;
       return (
-        <button
-          onClick={handleConfirm}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
-        >
-          {loading ? (
-            <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Calendar size={15} />
-          )}
-          <span>{loading ? "Ajout en cours…" : "Confirmer ce RDV dans Google Calendar"}</span>
+        <button onClick={handleConfirm} disabled={loading} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
+          {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={15}/>}
+          <span>{loading ? "Ajout…" : "Confirmer ce RDV dans Google Calendar"}</span>
         </button>
       );
     }
-
-    // Shared "done" state for all non-RDV categories
-    if (done) {
-      return (
-        <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-          <CheckCircle2 size={16} />
-          <span>Fait ✓</span>
-        </div>
-      );
-    }
-
-    if (category === "action") {
-      return (
-        <button
-          onClick={() => setDone(true)}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg, #E8842A 0%, #d4751f 100%)" }}
-        >
-          <Zap size={15} />
-          <span>Marquer comme traité</span>
-        </button>
-      );
-    }
-
-    if (category === "attente") {
-      return (
-        <button
-          onClick={() => setDone(true)}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground transition-all hover:bg-accent active:scale-[0.98]"
-        >
-          <Clock size={15} />
-          <span>Envoyer un rappel</span>
-        </button>
-      );
-    }
-
-    if (category === "bonsplans") {
-      return (
-        <button
-          onClick={() => setDone(true)}
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground transition-all hover:bg-accent active:scale-[0.98]"
-        >
-          <Tag size={15} />
-          <span>Voir l'offre</span>
-        </button>
-      );
-    }
-
-    // info (default)
-    return (
-      <button
-        onClick={() => setDone(true)}
-        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-muted/30 text-muted-foreground transition-all hover:bg-accent active:scale-[0.98]"
-      >
-        <BookOpen size={15} />
-        <span>Marquer comme lu</span>
-      </button>
-    );
+    if (done) return <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold"><CheckCircle2 size={16}/><span>Fait ✓</span></div>;
+    if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={15}/><span>Marquer comme traité</span></button>;
+    if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] transition-all"><Clock size={15}/><span>Envoyer un rappel</span></button>;
+    if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] transition-all"><Tag size={15}/><span>Voir l'offre</span></button>;
+    return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-muted/30 text-muted-foreground hover:bg-accent active:scale-[0.98] transition-all"><BookOpen size={15}/><span>Marquer comme lu</span></button>;
   }
 
   return (
-    <div
-      className={`rounded-2xl border transition-colors ${
-        confirmed || done ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
-      }`}
-    >
-      <div className="flex items-start gap-3 px-5 pt-4 pb-3">
-        {/* Icon */}
-        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Mail size={14} className="text-primary" />
-        </div>
-
-        {/* Content */}
+    <div className="flex flex-col h-full border-l border-border/40 bg-card overflow-hidden">
+      {/* Panel header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 flex-shrink-0">
+        <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <ArrowLeft size={16} />
+        </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground leading-snug truncate">{subject}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                <span className="text-primary/70">{sender}</span>
-                {dateStr && (
-                  <>
-                    {" · "}
-                    {dateStr}
-                  </>
-                )}
-              </p>
-            </div>
-            <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
-
-          {/* Body preview */}
-          {email.body && (
-            <p className="text-xs text-muted-foreground/70 mt-1.5 line-clamp-2 leading-relaxed">
-              {email.body.slice(0, 140)}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground truncate">{email.sender || "Expéditeur inconnu"}</p>
         </div>
+        {providerLabel && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: `${accentColor}18`, color: accentColor }}>
+            {providerLabel}
+          </span>
+        )}
+        <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
+          <X size={15} />
+        </button>
       </div>
 
-      {/* Category action button */}
-      <div className="px-5 pb-4">
-        {renderActionButton()}
+      {/* Subject + meta */}
+      <div className="px-5 pt-4 pb-3 border-b border-border/30 flex-shrink-0">
+        <div className="flex items-start gap-2.5 mb-2">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${accentColor}18` }}>
+            <Mail size={14} style={{ color: accentColor }} />
+          </div>
+          <h2 className="text-sm font-semibold text-foreground leading-snug pt-0.5">
+            {email.subject || "(Sans objet)"}
+          </h2>
+        </div>
+        {dateStr && <p className="text-xs text-muted-foreground/70 ml-10">{dateStr}</p>}
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        {bodyLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            Chargement du contenu…
+          </div>
+        ) : body ? (
+          <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
+            {body}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">Aucun contenu.</p>
+        )}
+      </div>
+
+      {/* Action */}
+      <div className="px-5 pb-5 pt-3 border-t border-border/30 flex-shrink-0">
+        {renderAction()}
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
+// EmailCard (list item)
+// ---------------------------------------------------------------------------
+
+function EmailCard({
+  email,
+  isIrisActive,
+  isSelected,
+  onSelect,
+}: {
+  email: EmailItem;
+  isIrisActive: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const category = email.category ?? "info";
+  const subject = email.subject || "(Sans objet)";
+  const sender = email.sender || "Expéditeur inconnu";
+  const dateStr = fmtDate(email.date);
+  const accentColor = email.provider === "outlook" ? "#0078D4" : email.provider === "gmail" ? "#4285F4" : "#E8842A";
+
+  return (
+    <div
+      className={`rounded-2xl cursor-pointer transition-all duration-150 ${cardClass(email.provider)} ${
+        isSelected ? "ring-1 ring-primary/40 bg-primary/5" : ""
+      }`}
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onSelect()}
+    >
+      <div className="flex items-start gap-3 px-4 pt-3.5 pb-2.5">
+        {/* Icon */}
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${accentColor}18` }}>
+          <Mail size={13} style={{ color: accentColor }} />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground leading-snug truncate">{subject}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            <span style={{ color: accentColor, opacity: 0.85 }}>{sender}</span>
+            {dateStr && <span className="text-muted-foreground/50"> · {dateStr}</span>}
+          </p>
+          {email.body && (
+            <p className="text-xs text-muted-foreground/55 mt-1 line-clamp-1 leading-relaxed">
+              {email.body.slice(0, 120)}
+            </p>
+          )}
+        </div>
+
+        {/* Category pill */}
+        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground flex-shrink-0 mt-0.5">
+          {category === "rdv" ? "RDV" : category === "bonsplans" ? "deal" : category}
+        </span>
+      </div>
+
+      {/* Quick action — disabled when Iris asleep */}
+      <div
+        className="px-4 pb-3 transition-opacity duration-150"
+        style={{ opacity: isIrisActive ? 1 : 0.28, pointerEvents: isIrisActive ? "auto" : "none" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <QuickAction email={email} category={category} />
+      </div>
+    </div>
+  );
+}
+
+function QuickAction({ email, category }: { email: EmailItem; category: string }) {
+  const [done, setDone] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  if (confirmed || done) {
+    return (
+      <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold">
+        <CheckCircle2 size={13} /><span>Fait ✓</span>
+      </div>
+    );
+  }
+
+  if (category === "rdv") {
+    const handle = async () => {
+      if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
+      setLoading(true);
+      try { await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0 }) }); setConfirmed(true); }
+      catch { setConfirmed(true); } finally { setLoading(false); }
+    };
+    return (
+      <button onClick={handle} disabled={loading} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
+        {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={12}/>}
+        <span>{loading ? "…" : "Confirmer RDV"}</span>
+      </button>
+    );
+  }
+  if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={12}/><span>Traiter</span></button>;
+  if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Clock size={12}/><span>Rappel</span></button>;
+  if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Tag size={12}/><span>Voir</span></button>;
+  return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-muted/30 text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><BookOpen size={12}/><span>Lu</span></button>;
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
+
+const TABS = [
+  { id: "rdv",       label: "RDV" },
+  { id: "action",    label: "Action" },
+  { id: "attente",   label: "En attente" },
+  { id: "bonsplans", label: "Bons plans" },
+  { id: "info",      label: "Info" },
+] as const;
 
 export default function EmailsPage() {
   const queryClient = useQueryClient();
@@ -250,333 +309,297 @@ export default function EmailsPage() {
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { isIrisActive } = useAuth();
+  const { isIrisActive, setEmailCount } = useAuth();
 
-  const {
-    connected: gmailConnected,
-    enabled: gmailEnabled,
-    isLoading: gmailStatusLoading,
-    error: gmailStatusError,
-    refetchStatus: refetchGmail,
-  } = useGmailConnection();
+  const { connected: gmailConnected, enabled: gmailEnabled, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
+  const { connected: outlookConnected, isLoading: outlookStatusLoading, refetchStatus: refetchOutlook } = useOutlookConnection();
 
-  const {
-    connected: outlookConnected,
-    isLoading: outlookStatusLoading,
-    refetchStatus: refetchOutlook,
-  } = useOutlookConnection();
-
-  // Fetch emails when at least one provider is active
   const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
-  const { data: emails, isLoading, error } = useEmails(20, anyConnected);
 
-  // Handle OAuth callbacks
+  const {
+    data: feedData,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useEmailFeed(anyConnected);
+
+  // Flatten all pages
+  const allEmails = feedData?.pages.flatMap((p) => p.emails) ?? [];
+
+  // Compute tab counts over ALL loaded emails
+  const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
+  for (const e of allEmails) {
+    const cat = e.category ?? "info";
+    tabCounts[cat in tabCounts ? cat : "info"]++;
+  }
+
+  // Filtered list for the active tab
+  const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
+
+  // Sync total email count to sidebar badge
+  useEffect(() => { setEmailCount(allEmails.length); }, [allEmails.length, setEmailCount]);
+
+  // Infinite scroll — when sentinel is visible, load next page
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // OAuth callbacks
   useEffect(() => {
     const { gmail, outlook, reason } = getOAuthCallbackParams();
     if (!gmail && !outlook) return;
     clearCallbackParams();
-
-    if (gmail === "error") {
-      const devSuffix = import.meta.env.DEV && reason ? ` (${reason})` : "";
-      setStatusMsg({ text: `Gmail connection failed. Please try again.${devSuffix}`, ok: false });
-      return;
-    }
-    if (outlook === "error") {
-      const devSuffix = import.meta.env.DEV && reason ? ` (${reason})` : "";
-      setStatusMsg({ text: `Outlook connection failed. Please try again.${devSuffix}`, ok: false });
-      return;
-    }
-
+    if (gmail === "error") { setStatusMsg({ text: `Gmail connection failed.${import.meta.env.DEV && reason ? ` (${reason})` : ""}`, ok: false }); return; }
+    if (outlook === "error") { setStatusMsg({ text: `Outlook connection failed.${import.meta.env.DEV && reason ? ` (${reason})` : ""}`, ok: false }); return; }
     if (gmail === "connected") {
       localStorage.setItem("gmail_enabled", "true");
       setStatusMsg({ text: "Gmail connecté ! Vos emails se chargent…", ok: true });
       void (async () => {
-        const statusResult = await refetchGmail();
-        if (statusResult.data?.connected) {
-          await notifyGmailConnected({ gmailEmail: statusResult.data.gmail_email });
-          await queryClient.invalidateQueries({ queryKey: ["emails"] });
-        } else {
-          setStatusMsg({ text: "Gmail lié, mais Iris n'a pas pu confirmer la boîte. Actualisez une fois.", ok: false });
-        }
+        const r = await refetchGmail();
+        if (r.data?.connected) { await notifyGmailConnected({ gmailEmail: r.data.gmail_email }); await queryClient.invalidateQueries({ queryKey: ["emails-feed"] }); }
+        else setStatusMsg({ text: "Gmail lié, mais Iris n'a pas pu confirmer la boîte. Actualisez.", ok: false });
       })();
     }
-
     if (outlook === "success") {
       setStatusMsg({ text: "Outlook connecté ! Vos emails se chargent…", ok: true });
-      void (async () => {
-        await refetchOutlook();
-        await queryClient.invalidateQueries({ queryKey: ["emails"] });
-      })();
+      void (async () => { await refetchOutlook(); await queryClient.invalidateQueries({ queryKey: ["emails-feed"] }); })();
     }
   }, [queryClient, refetchGmail, refetchOutlook]);
 
   const emailErrorStatus = (error as Error & { status?: number } | null)?.status;
   const gmailStatusErrorStatus = (gmailStatusError as Error & { status?: number } | null)?.status;
   const isSessionExpired = gmailStatusErrorStatus === 401 || gmailStatusErrorStatus === 403;
-  const noProviderConnected =
-    !gmailStatusLoading &&
-    !outlookStatusLoading &&
-    !gmailConnected &&
-    !outlookConnected &&
-    !isSessionExpired &&
-    emailErrorStatus !== 200;
+  const noProviderConnected = !gmailStatusLoading && !outlookStatusLoading && !gmailConnected && !outlookConnected && !isSessionExpired && emailErrorStatus !== 200;
+  const pendingCount = tabCounts["rdv"];
 
   async function handleConnectGmail() {
     setConnectingGmail(true);
-    try {
-      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google");
-      window.location.href = auth_url;
-    } catch {
-      setStatusMsg({ text: "Impossible de démarrer la connexion Gmail. Vérifiez la config backend.", ok: false });
-      setConnectingGmail(false);
-    }
+    try { const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google"); window.location.href = auth_url; }
+    catch { setStatusMsg({ text: "Impossible de démarrer la connexion Gmail. Vérifiez la config backend.", ok: false }); setConnectingGmail(false); }
   }
 
   async function handleConnectOutlook() {
     setConnectingOutlook(true);
-    try {
-      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
-      window.location.href = auth_url;
-    } catch {
-      setStatusMsg({ text: "Impossible de démarrer la connexion Outlook. Vérifiez la config backend.", ok: false });
-      setConnectingOutlook(false);
-    }
+    try { const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft"); window.location.href = auth_url; }
+    catch { setStatusMsg({ text: "Impossible de démarrer la connexion Outlook. Vérifiez la config backend.", ok: false }); setConnectingOutlook(false); }
   }
 
-  const pendingCount = emails?.filter((e) => (e.category ?? "info") === "rdv").length ?? 0;
+  const handleSelectEmail = useCallback((email: EmailItem) => {
+    setSelectedEmail((prev) => (prev?.message_id === email.message_id ? null : email));
+  }, []);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-8 pt-8 pb-4">
+    <div className="flex flex-col h-full overflow-hidden">
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-3 flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Emails</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {gmailConnected && outlookConnected
-              ? "Gmail + Outlook"
-              : gmailConnected
-              ? "Gmail"
-              : outlookConnected
-              ? "Outlook"
-              : "Connectez une boîte mail"}
+          <h1 className="text-xl font-bold text-foreground">Emails</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {gmailConnected && outlookConnected ? "Gmail + Outlook" : gmailConnected ? "Gmail" : outlookConnected ? "Outlook" : "Connectez une boîte mail"}
           </p>
         </div>
+
         {isIrisActive ? (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card">
             <span className="text-xs text-primary">✦</span>
-            <span className="text-sm text-muted-foreground">Iris analyse vos emails...</span>
-            <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted-foreground">Iris analyse…</span>
+            <div className="w-3 h-3 border-[1.5px] border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-muted/30">
-            <span className="text-xs text-muted-foreground opacity-50">✦</span>
-            <span className="text-sm text-muted-foreground italic">Iris est en sommeil</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-muted/30">
+            <span className="text-xs text-muted-foreground opacity-40">✦</span>
+            <span className="text-xs text-muted-foreground italic">Iris est en sommeil</span>
           </div>
         )}
       </div>
 
-      {/* Status banner */}
+      {/* ── Banners ─────────────────────────────────────────────────────── */}
       {statusMsg && (
-        <div
-          className={`mx-8 mb-3 px-4 py-2.5 rounded-xl text-sm font-medium ${
-            statusMsg.ok
-              ? "bg-green-500/10 text-green-400 border border-green-500/20"
-              : "bg-red-500/10 text-red-400 border border-red-500/20"
-          }`}
-        >
-          {statusMsg.text}
+        <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+          <span>{statusMsg.text}</span>
+          <button onClick={() => setStatusMsg(null)} className="opacity-60 hover:opacity-100 transition-opacity ml-2"><X size={13}/></button>
         </div>
       )}
-
-      {/* Pending appointments banner */}
       {anyConnected && pendingCount > 0 && (
-        <div className="mx-8 mb-3 px-4 py-2.5 rounded-xl text-sm font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
-          <Calendar size={15} />
-          <span>{pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer dans Google Calendar</span>
-          <span className="ml-auto px-2 py-0.5 rounded-full bg-primary text-white text-xs font-bold">
-            {pendingCount}
-          </span>
+        <div className="mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
+          <Calendar size={13}/>
+          <span>{pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer</span>
+          <span className="ml-auto px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">{pendingCount}</span>
         </div>
       )}
 
-      {/* Tabs */}
-      {(() => {
-        const tabDef = [
-          { id: "rdv",       label: "RDV" },
-          { id: "action",    label: "Action" },
-          { id: "attente",   label: "En attente" },
-          { id: "bonsplans", label: "Bons plans" },
-          { id: "info",      label: "Info" },
-        ] as const;
-        const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-        if (emails) {
-          for (const e of emails) {
-            const cat = e.category ?? "info";
-            tabCounts[cat in tabCounts ? cat : "info"]++;
-          }
-        }
-        return (
-          <div
-            className="flex px-8 mb-5 flex-shrink-0 border-b"
-            style={{ borderColor: "rgba(255,255,255,0.07)" }}
+      {/* ── Tabs ────────────────────────────────────────────────────────── */}
+      <div className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium cursor-pointer transition-all border-b-2 -mb-px whitespace-nowrap"
+            style={{ color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
           >
-            {tabDef.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
-                style={{
-                  color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
-                  borderColor: activeTab === t.id ? "#E8842A" : "transparent",
-                  background: "transparent",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {t.label}
-                {tabCounts[t.id] > 0 && (
-                  <span
-                    className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                    style={{
-                      background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)",
-                      color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)",
-                      fontSize: 10,
-                    }}
-                  >
-                    {tabCounts[t.id]}
-                  </span>
-                )}
-              </button>
+            {t.label}
+            {tabCounts[t.id] > 0 && (
+              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.12)", color: activeTab === t.id ? "white" : "rgba(255,255,255,0.45)" }}>
+                {tabCounts[t.id]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Content (list + panel side-by-side) ─────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* Email list */}
+        <div className={`flex flex-col overflow-y-auto transition-all duration-200 ${selectedEmail ? "w-[400px] flex-shrink-0" : "flex-1"}`}>
+          <div className="flex-1 px-4 pt-3 pb-6 space-y-2">
+
+            {/* No provider */}
+            {noProviderConnected && (
+              <div className="flex flex-col items-center justify-center py-12 gap-5 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl">✉️</div>
+                <div>
+                  <p className="text-foreground font-semibold mb-1">Connectez votre boîte mail</p>
+                  <p className="text-xs text-muted-foreground max-w-xs">Iris lit vos emails et détecte automatiquement les rendez-vous.</p>
+                </div>
+                <div className="flex flex-col gap-2 w-full max-w-xs">
+                  <button onClick={handleConnectGmail} disabled={connectingGmail} className="flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+                    <Mail size={15}/>{connectingGmail ? "Redirection…" : "Connecter Gmail"}
+                  </button>
+                  <button onClick={handleConnectOutlook} disabled={connectingOutlook} className="flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm font-semibold hover:bg-accent transition-colors disabled:opacity-50">
+                    <MicrosoftIcon/>{connectingOutlook ? "Redirection…" : "Connecter Outlook"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Gmail disabled */}
+            {!noProviderConnected && !gmailEnabled && !outlookConnected && (
+              <div className="flex flex-col items-center py-14 gap-2 text-center">
+                <p className="text-muted-foreground text-sm">Gmail est désactivé.</p>
+                <p className="text-xs text-muted-foreground/50">Activez-le dans Paramètres → Services connectés.</p>
+              </div>
+            )}
+
+            {/* Loading first page */}
+            {anyConnected && isLoading && (
+              <div className="flex items-center justify-center py-14 gap-2.5 text-muted-foreground">
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
+                <span className="text-sm">Chargement de vos emails…</span>
+              </div>
+            )}
+
+            {isSessionExpired && <div className="text-center py-14 text-red-400 text-sm">Session expirée. Reconnectez-vous.</div>}
+            {error && !noProviderConnected && emailErrorStatus !== 404 && <div className="text-center py-14 text-red-400 text-sm">Erreur de chargement. Réessayez.</div>}
+
+            {/* Empty state for tab */}
+            {anyConnected && !isLoading && allEmails.length > 0 && filteredEmails.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground/40 text-sm">Aucun email dans cette catégorie.</div>
+            )}
+            {anyConnected && !isLoading && allEmails.length === 0 && !error && (
+              <div className="text-center py-14 text-muted-foreground text-sm">Aucun email trouvé.</div>
+            )}
+
+            {/* Email cards */}
+            {filteredEmails.map((email) => (
+              <EmailCard
+                key={email.message_id ?? email.subject}
+                email={email}
+                isIrisActive={isIrisActive}
+                isSelected={selectedEmail?.message_id === email.message_id}
+                onSelect={() => handleSelectEmail(email)}
+              />
             ))}
-          </div>
-        );
-      })()}
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-8 space-y-3">
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-1" />
 
-        {/* No provider connected → big CTA with both options */}
-        {noProviderConnected && (
-          <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl">
-              ✉️
-            </div>
-            <div>
-              <p className="text-foreground font-semibold text-lg mb-1">
-                Connectez votre boîte mail
+            {/* Loading next page */}
+            {isFetchingNextPage && (
+              <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
+                <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
+                <span className="text-xs">Chargement de la suite…</span>
+              </div>
+            )}
+
+            {/* End of list per tab */}
+            {!hasNextPage && !isFetchingNextPage && filteredEmails.length > 0 && (
+              <p className="text-center text-xs text-muted-foreground/30 py-3">
+                — Tous les emails de cette catégorie sont chargés —
               </p>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Iris lit vos emails et détecte automatiquement les rendez-vous pour alléger votre charge mentale.
-              </p>
+            )}
+
+            {/* Connect nudges */}
+            {gmailConnected && !outlookConnected && !noProviderConnected && (
+              <div className="mt-1 flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border border-dashed border-border bg-muted/15">
+                <Plug size={14} className="text-muted-foreground flex-shrink-0"/>
+                <p className="text-xs text-muted-foreground">Aussi sur Outlook ?{" "}
+                  <button onClick={handleConnectOutlook} disabled={connectingOutlook} className="text-primary font-semibold hover:underline disabled:opacity-50">
+                    {connectingOutlook ? "…" : "Connecter →"}
+                  </button>
+                </p>
+              </div>
+            )}
+            {outlookConnected && !gmailConnected && !noProviderConnected && (
+              <div className="mt-1 flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border border-dashed border-border bg-muted/15">
+                <Plug size={14} className="text-muted-foreground flex-shrink-0"/>
+                <p className="text-xs text-muted-foreground">Aussi sur Gmail ?{" "}
+                  <button onClick={handleConnectGmail} disabled={connectingGmail} className="text-primary font-semibold hover:underline disabled:opacity-50">
+                    {connectingGmail ? "…" : "Connecter →"}
+                  </button>
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Email detail side panel — always visible */}
+        <div className="flex-1 overflow-hidden border-l border-border/40">
+          {selectedEmail ? (
+            <EmailPanel email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-4 opacity-20 select-none pointer-events-none">
+              <svg viewBox="0 0 32 32" fill="none" className="w-16 h-16">
+                <circle cx="16" cy="16" r="14" stroke="#f97316" strokeWidth="1.5" />
+                <path d="M16 8 C22 12, 22 20, 16 24 C10 20, 10 12, 16 8Z" fill="#f97316" />
+              </svg>
+              <p className="text-sm text-muted-foreground font-medium">Sélectionnez un email</p>
             </div>
-            <div className="flex flex-col gap-3 w-full max-w-xs">
-              <button
-                onClick={handleConnectGmail}
-                disabled={connectingGmail}
-                className="flex items-center justify-center gap-2.5 w-full px-6 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                <Mail size={16} />
-                {connectingGmail ? "Redirection…" : "Connecter Gmail"}
-              </button>
-              <button
-                onClick={handleConnectOutlook}
-                disabled={connectingOutlook}
-                className="flex items-center justify-center gap-2.5 w-full px-6 py-3 rounded-xl border border-border bg-card text-foreground text-sm font-semibold hover:bg-accent transition-colors disabled:opacity-50"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
-                  <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
-                  <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
-                  <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
-                </svg>
-                {connectingOutlook ? "Redirection…" : "Connecter Outlook"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Gmail disabled */}
-        {!noProviderConnected && !gmailEnabled && !outlookConnected && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <p className="text-muted-foreground text-sm">Gmail est désactivé.</p>
-            <p className="text-xs text-muted-foreground/60">Activez-le dans Paramètres → Services connectés.</p>
-          </div>
-        )}
-
-        {/* Loading */}
-        {anyConnected && isLoading && (
-          <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
-            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Chargement de vos emails…</span>
-          </div>
-        )}
-
-        {/* Session expired */}
-        {isSessionExpired && (
-          <div className="text-center py-16 text-red-400 text-sm">
-            Votre session Iris a expiré. Reconnectez-vous pour relier Gmail.
-          </div>
-        )}
-
-        {/* Fetch error (not "no provider") */}
-        {error && !noProviderConnected && emailErrorStatus !== 404 && (
-          <div className="text-center py-16 text-red-400 text-sm">
-            Erreur de chargement des emails. Réessayez plus tard.
-          </div>
-        )}
-
-        {/* Empty inbox */}
-        {anyConnected && !isLoading && emails && emails.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground text-sm">
-            Aucun email trouvé dans votre boîte.
-          </div>
-        )}
-
-        {/* Email list — filtered by active tab */}
-        {emails
-          ?.filter((e) => (e.category ?? "info") === activeTab)
-          .map((email) => (
-            <EmailCard key={email.message_id ?? email.subject} email={email} />
-          ))}
-
-        {/* "Connect Outlook too" nudge — shown when only Gmail is connected */}
-        {gmailConnected && !outlookConnected && !noProviderConnected && (
-          <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
-            <Plug size={16} className="text-muted-foreground flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">
-                Vous utilisez aussi Outlook ?{" "}
-                <button
-                  onClick={handleConnectOutlook}
-                  disabled={connectingOutlook}
-                  className="text-primary font-semibold hover:underline disabled:opacity-50"
-                >
-                  {connectingOutlook ? "Redirection…" : "Connecter Outlook →"}
-                </button>
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* "Connect Gmail too" nudge — shown when only Outlook is connected */}
-        {outlookConnected && !gmailConnected && !noProviderConnected && (
-          <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
-            <Plug size={16} className="text-muted-foreground flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">
-                Vous utilisez aussi Gmail ?{" "}
-                <button
-                  onClick={handleConnectGmail}
-                  disabled={connectingGmail}
-                  className="text-primary font-semibold hover:underline disabled:opacity-50"
-                >
-                  {connectingGmail ? "Redirection…" : "Connecter Gmail →"}
-                </button>
-              </p>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Microsoft icon
+// ---------------------------------------------------------------------------
+
+function MicrosoftIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
+      <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
+      <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
+      <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
+    </svg>
   );
 }

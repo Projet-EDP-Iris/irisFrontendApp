@@ -315,3 +315,38 @@
     inset: -1px;
   }
 }
+
+/* ── Email card provider hover effects ─────────────────────────────────── */
+
+.email-card-gmail {
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.email-card-gmail:hover {
+  border-color: transparent;
+  background:
+    linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+    linear-gradient(135deg, #4285F4, #EA4335, #FBBC05, #34A853) border-box;
+  box-shadow:
+    0 0 0 0px transparent,
+    0 6px 28px rgba(66, 133, 244, 0.22),
+    0 6px 28px rgba(234, 67, 53, 0.10);
+}
+
+.email-card-outlook {
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.email-card-outlook:hover {
+  border-color: #0078D4;
+  box-shadow: 0 0 0 0.5px #0078D430, 0 6px 28px rgba(0, 120, 212, 0.22);
+}
+
+.email-card-default {
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.email-card-default:hover {
+  border-color: rgba(232, 132, 42, 0.6);
+  box-shadow: 0 6px 28px rgba(232, 132, 42, 0.18);
+}

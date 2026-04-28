@@ -25,6 +25,8 @@ interface AuthContextValue {
   isLoading: boolean;
   isIrisActive: boolean;
   setIsIrisActive: (active: boolean) => void;
+  emailCount: number;
+  setEmailCount: (n: number) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (payload: { email: string; password: string; name: string; profile_icon: string }) => Promise<void>;
   updateProfile: (payload: { name?: string; email?: string; profile_icon?: string }) => Promise<void>;
@@ -43,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.getItem("iris_token")
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [emailCount, setEmailCount] = useState(0);
 
   const setIsIrisActive = (active: boolean) => {
     setIsIrisActiveState(active);
@@ -121,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isLoading, isIrisActive, setIsIrisActive, login, signup, updateProfile, logout }}
+      value={{ user, token, isLoading, isIrisActive, setIsIrisActive, emailCount, setEmailCount, login, signup, updateProfile, logout }}
     >
       {children}
     </AuthContext.Provider>
