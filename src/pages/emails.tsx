@@ -85,6 +85,7 @@ function EmailPanel({
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
+  const [confirmedSubject, setConfirmedSubject] = useState<string | null>(null);
 
   const category = email.category ?? "info";
   const dateStr = fmtDate(email.date, true);
@@ -110,11 +111,16 @@ function EmailPanel({
       const result = await apiFetch<any>(`/calendar/confirm/${email.db_id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_index: 0 }),
+        body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       if (result?.slot?.start_time) {
         const d = new Date(result.slot.start_time);
         setConfirmedDate(d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+      }
+      setConfirmedSubject(email.subject ?? null);
+      const failedProviders = result?.providers?.filter((p: any) => p.error);
+      if (failedProviders?.length) {
+        console.warn("Some calendar providers failed:", failedProviders);
       }
       setConfirmed(true);
     } catch (err) {
@@ -132,13 +138,16 @@ function EmailPanel({
     if (category === "rdv") {
       if (confirmed) {
         return (
-          <div className="flex flex-col items-center gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+          <div className="flex flex-col gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} />
-              <span>RDV ajouté à Google Calendar ✓</span>
+              <span>Ajouté au calendrier ✓</span>
             </div>
+            {confirmedSubject && (
+              <span className="text-xs font-normal opacity-90 truncate">{confirmedSubject}</span>
+            )}
             {confirmedDate && (
-              <span className="text-xs font-normal opacity-80">Prévu le : {confirmedDate}</span>
+              <span className="text-xs font-normal opacity-70">Prévu le : {confirmedDate}</span>
             )}
           </div>
         );
@@ -287,6 +296,7 @@ function QuickAction({ email, category }: { email: EmailItem; category: string }
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [calError, setCalError] = useState(false);
 
   if (confirmed || done) {
     return (
@@ -297,11 +307,23 @@ function QuickAction({ email, category }: { email: EmailItem; category: string }
   }
 
   if (category === "rdv") {
+    if (calError) {
+      return (
+        <button onClick={() => setCalError(false)} className="flex items-center gap-1.5 text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 transition-all" title="Réessayer">
+          <X size={12}/><span>Erreur calendrier</span>
+        </button>
+      );
+    }
     const handle = async () => {
       if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
       setLoading(true);
-      try { await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0 }) }); setConfirmed(true); }
-      catch { setConfirmed(true); } finally { setLoading(false); }
+      try {
+        await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
+        setConfirmed(true);
+      } catch (err) {
+        console.error("Calendar confirm failed:", err);
+        setCalError(true);
+      } finally { setLoading(false); }
     };
     return (
       <button onClick={handle} disabled={loading} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
