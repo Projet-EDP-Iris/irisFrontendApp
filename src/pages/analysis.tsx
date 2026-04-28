@@ -135,7 +135,7 @@ export default function AnalysisPage() {
               }}
             />
           </div>
-          <button className="flex items-center gap-1 mt-3 text-sm text-primary hover:underline">
+          <button className="hidden flex items-center gap-1 mt-3 text-sm text-primary hover:underline">
             See details <ArrowRight size={13} />
           </button>
         </div>
@@ -159,7 +159,7 @@ export default function AnalysisPage() {
               }}
             />
           </div>
-          <button className="flex items-center gap-1 mt-3 text-sm text-primary hover:underline">
+          <button className="hidden flex items-center gap-1 mt-3 text-sm text-primary hover:underline">
             See details <ArrowRight size={13} />
           </button>
         </div>

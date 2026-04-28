@@ -148,7 +148,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   />
                 </div>
                 <div className="pt-1 space-y-2">
-                  <button className="w-full rounded-xl py-2 text-xs font-medium border border-primary/35 text-primary hover:bg-primary/10 transition-colors">
+                  <button className="hidden w-full rounded-xl py-2 text-xs font-medium border border-primary/35 text-primary hover:bg-primary/10 transition-colors">
                     Changer le mot de passe
                   </button>
                   <button
