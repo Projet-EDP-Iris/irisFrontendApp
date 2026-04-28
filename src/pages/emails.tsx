@@ -437,9 +437,36 @@ export default function EmailsPage() {
 
   async function handleConnectGmail() {
     setConnectingGmail(true);
-    try { const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google"); window.location.href = auth_url; }
+    try {
+      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google");
+      if (window.irisDesktop?.openExternal) {
+        window.irisDesktop.openExternal(auth_url);
+      } else {
+        window.location.href = auth_url;
+      }
+    }
     catch { setStatusMsg({ text: "Impossible de démarrer la connexion Gmail. Vérifiez la config backend.", ok: false }); setConnectingGmail(false); }
   }
+
+  useEffect(() => {
+    if (!window.irisDesktop?.onOAuthCallback) return;
+    const unsubscribe = window.irisDesktop.onOAuthCallback((params) => {
+      if (params.gmail === "connected") {
+        localStorage.setItem("gmail_enabled", "true");
+        setConnectingGmail(false);
+        setStatusMsg({ text: "Gmail connecté ! Vos emails se chargent…", ok: true });
+        void (async () => {
+          const r = await refetchGmail();
+          if (r.data?.connected) { await notifyGmailConnected({ gmailEmail: r.data.gmail_email }); await queryClient.invalidateQueries({ queryKey: ["emails-feed"] }); }
+          else setStatusMsg({ text: "Gmail lié, mais Iris n'a pas pu confirmer la boîte. Actualisez.", ok: false });
+        })();
+      } else if (params.gmail === "error") {
+        setConnectingGmail(false);
+        setStatusMsg({ text: "Gmail connection failed.", ok: false });
+      }
+    });
+    return unsubscribe;
+  }, [queryClient, refetchGmail]);
 
   async function handleConnectOutlook() {
     setConnectingOutlook(true);

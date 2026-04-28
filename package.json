@@ -43,6 +43,9 @@
     "dmg": {
       "artifactName": "Iris.dmg"
     },
+    "protocols": [
+      { "name": "Iris", "schemes": ["iris"] }
+    ],
     "publish": [
       {
         "provider": "github"
