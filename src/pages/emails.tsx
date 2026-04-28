@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Mail, MoreHorizontal, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmails } from "@/hooks/useEmails";
@@ -10,7 +10,15 @@ import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
 // ---------------------------------------------------------------------------
-// OAuth callback helpers (inline — reads URL hash/query params after redirect)
+// Constants
+// ---------------------------------------------------------------------------
+
+const EMAILS_PER_PAGE = 20;
+const GMAIL_COLORS = ["#EA4335", "#34A853", "#FBBC05", "#4285F4"] as const;
+const OUTLOOK_BLUE = "#0078D4";
+
+// ---------------------------------------------------------------------------
+// OAuth callback helpers
 // ---------------------------------------------------------------------------
 
 function getOAuthCallbackParams(): {
@@ -66,21 +74,136 @@ function buildCalendarUrl(email: EmailItem): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function providerAccent(email: EmailItem, index: number): string {
+  if (email.provider === "gmail") return GMAIL_COLORS[index % GMAIL_COLORS.length];
+  if (email.provider === "outlook") return OUTLOOK_BLUE;
+  return "#E8842A";
+}
+
+// ---------------------------------------------------------------------------
+// Email Detail Modal
+// ---------------------------------------------------------------------------
+
+function EmailDetailModal({ email, index, onClose }: { email: EmailItem; index: number; onClose: () => void }) {
+  const accent = providerAccent(email, index);
+  const dateStr = formatDate(email.date);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const providerLabel = email.provider === "gmail" ? "Gmail" : email.provider === "outlook" ? "Outlook" : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border bg-card shadow-2xl overflow-hidden"
+        style={{ borderColor: `${accent}30` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Accent bar */}
+        <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }} />
+
+        {/* Header */}
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-border/40">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+            style={{ background: `${accent}18` }}
+          >
+            <Mail size={16} style={{ color: accent }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-foreground leading-snug mb-1">
+              {email.subject || "(Sans objet)"}
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">{email.sender || "Expéditeur inconnu"}</span>
+              {dateStr && (
+                <>
+                  <span className="text-muted-foreground/30 text-xs">·</span>
+                  <span className="text-xs text-muted-foreground/70">{dateStr}</span>
+                </>
+              )}
+              {providerLabel && (
+                <>
+                  <span className="text-muted-foreground/30 text-xs">·</span>
+                  <span
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                    style={{ background: `${accent}18`, color: accent }}
+                  >
+                    {providerLabel}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {email.body ? (
+            <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap font-mono-ish">
+              {email.body}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Aucun contenu.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // EmailCard
 // ---------------------------------------------------------------------------
 
-function EmailCard({ email }: { email: EmailItem }) {
+function EmailCard({
+  email,
+  index,
+  isIrisActive,
+  onOpen,
+}: {
+  email: EmailItem;
+  index: number;
+  isIrisActive: boolean;
+  onOpen: () => void;
+}) {
   const [confirmed, setConfirmed] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   const category = email.category ?? "info";
-  const subject = email.subject ?? "(Sans objet)";
-  const sender = email.sender ?? "Expéditeur inconnu";
-  const dateStr = email.date
-    ? new Date(email.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-    : null;
+  const subject = email.subject || "(Sans objet)";
+  const sender = email.sender || "Expéditeur inconnu";
+  const dateStr = formatDate(email.date);
+  const accent = providerAccent(email, index);
 
   const handleConfirm = async () => {
     if (!email.db_id) {
@@ -96,8 +219,7 @@ function EmailCard({ email }: { email: EmailItem }) {
         body: JSON.stringify({ slot_index: 0 }),
       });
       setConfirmed(true);
-    } catch (err) {
-      console.error("Calendar confirm failed:", err);
+    } catch {
       setConfirmed(true);
     } finally {
       setLoading(false);
@@ -105,7 +227,6 @@ function EmailCard({ email }: { email: EmailItem }) {
   };
 
   function renderActionButton() {
-    // RDV — calendar confirm (original behaviour)
     if (category === "rdv") {
       if (confirmed) {
         return (
@@ -132,7 +253,6 @@ function EmailCard({ email }: { email: EmailItem }) {
       );
     }
 
-    // Shared "done" state for all non-RDV categories
     if (done) {
       return (
         <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
@@ -179,7 +299,6 @@ function EmailCard({ email }: { email: EmailItem }) {
       );
     }
 
-    // info (default)
     return (
       <button
         onClick={() => setDone(true)}
@@ -193,14 +312,30 @@ function EmailCard({ email }: { email: EmailItem }) {
 
   return (
     <div
-      className={`rounded-2xl border transition-colors ${
-        confirmed || done ? "border-green-500/30 bg-green-500/5" : "border-card-border bg-card"
-      }`}
+      className="rounded-2xl border transition-all duration-200 cursor-pointer"
+      style={{
+        borderColor: hovered
+          ? `${accent}55`
+          : confirmed || done
+          ? "rgba(34,197,94,0.3)"
+          : "var(--border, rgba(255,255,255,0.08))",
+        background: confirmed || done ? "rgba(34,197,94,0.04)" : "var(--card)",
+        boxShadow: hovered ? `0 0 0 1px ${accent}22, 0 4px 24px ${accent}18` : undefined,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex items-start gap-3 px-5 pt-4 pb-3">
-        {/* Icon */}
-        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Mail size={14} className="text-primary" />
+      {/* Clickable email header area */}
+      <div
+        className="flex items-start gap-3 px-5 pt-4 pb-3"
+        onClick={onOpen}
+      >
+        {/* Provider-colored icon */}
+        <div
+          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors duration-200"
+          style={{ background: `${accent}18` }}
+        >
+          <Mail size={14} style={{ color: accent }} />
         </div>
 
         {/* Content */}
@@ -209,31 +344,31 @@ function EmailCard({ email }: { email: EmailItem }) {
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground leading-snug truncate">{subject}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                <span className="text-primary/70">{sender}</span>
-                {dateStr && (
-                  <>
-                    {" · "}
-                    {dateStr}
-                  </>
-                )}
+                <span style={{ color: accent, opacity: 0.8 }}>{sender}</span>
+                {dateStr && <>{" · "}{dateStr}</>}
               </p>
             </div>
-            <button className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
+            <button
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+              onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            >
               <MoreHorizontal size={16} />
             </button>
           </div>
 
-          {/* Body preview */}
           {email.body && (
-            <p className="text-xs text-muted-foreground/70 mt-1.5 line-clamp-2 leading-relaxed">
-              {email.body.slice(0, 140)}
+            <p className="text-xs text-muted-foreground/60 mt-1.5 line-clamp-2 leading-relaxed">
+              {email.body.slice(0, 160)}
             </p>
           )}
         </div>
       </div>
 
-      {/* Category action button */}
-      <div className="px-5 pb-4">
+      {/* Action button — grayed when Iris is asleep */}
+      <div
+        className="px-5 pb-4 transition-opacity duration-200"
+        style={{ opacity: isIrisActive ? 1 : 0.35, pointerEvents: isIrisActive ? "auto" : "none" }}
+      >
         {renderActionButton()}
       </div>
     </div>
@@ -247,9 +382,11 @@ function EmailCard({ email }: { email: EmailItem }) {
 export default function EmailsPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("rdv");
+  const [currentPage, setCurrentPage] = useState(1);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [openEmail, setOpenEmail] = useState<{ email: EmailItem; index: number } | null>(null);
 
   const { isIrisActive } = useAuth();
 
@@ -267,9 +404,11 @@ export default function EmailsPage() {
     refetchStatus: refetchOutlook,
   } = useOutlookConnection();
 
-  // Fetch emails when at least one provider is active
   const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
-  const { data: emails, isLoading, error } = useEmails(20, anyConnected);
+  const { data: emails, isLoading, error } = useEmails(anyConnected);
+
+  // Reset to page 1 when tab changes
+  useEffect(() => { setCurrentPage(1); }, [activeTab]);
 
   // Handle OAuth callbacks
   useEffect(() => {
@@ -345,6 +484,35 @@ export default function EmailsPage() {
   }
 
   const pendingCount = emails?.filter((e) => (e.category ?? "info") === "rdv").length ?? 0;
+  const totalEmailCount = emails?.length ?? 0;
+
+  // Per-tab filtered + paginated emails
+  const tabDef = [
+    { id: "rdv",       label: "RDV" },
+    { id: "action",    label: "Action" },
+    { id: "attente",   label: "En attente" },
+    { id: "bonsplans", label: "Bons plans" },
+    { id: "info",      label: "Info" },
+  ] as const;
+
+  const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
+  if (emails) {
+    for (const e of emails) {
+      const cat = e.category ?? "info";
+      tabCounts[cat in tabCounts ? cat : "info"]++;
+    }
+  }
+
+  const filteredEmails = emails?.filter((e) => (e.category ?? "info") === activeTab) ?? [];
+  const totalPages = Math.max(1, Math.ceil(filteredEmails.length / EMAILS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedEmails = filteredEmails.slice((safePage - 1) * EMAILS_PER_PAGE, safePage * EMAILS_PER_PAGE);
+
+  // Global index for color cycling (use position in full emails array)
+  const getGlobalIndex = useCallback(
+    (email: EmailItem) => emails?.indexOf(email) ?? 0,
+    [emails]
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -362,16 +530,28 @@ export default function EmailsPage() {
               : "Connectez une boîte mail"}
           </p>
         </div>
+
+        {/* Iris status pill with email count */}
         {isIrisActive ? (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card">
             <span className="text-xs text-primary">✦</span>
             <span className="text-sm text-muted-foreground">Iris analyse vos emails...</span>
+            {totalEmailCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-bold tabular-nums">
+                {totalEmailCount}
+              </span>
+            )}
             <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-muted/30">
             <span className="text-xs text-muted-foreground opacity-50">✦</span>
             <span className="text-sm text-muted-foreground italic">Iris est en sommeil</span>
+            {totalEmailCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/60 text-xs font-bold tabular-nums">
+                {totalEmailCount}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -401,70 +581,50 @@ export default function EmailsPage() {
       )}
 
       {/* Tabs */}
-      {(() => {
-        const tabDef = [
-          { id: "rdv",       label: "RDV" },
-          { id: "action",    label: "Action" },
-          { id: "attente",   label: "En attente" },
-          { id: "bonsplans", label: "Bons plans" },
-          { id: "info",      label: "Info" },
-        ] as const;
-        const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-        if (emails) {
-          for (const e of emails) {
-            const cat = e.category ?? "info";
-            tabCounts[cat in tabCounts ? cat : "info"]++;
-          }
-        }
-        return (
-          <div
-            className="flex px-8 mb-5 flex-shrink-0 border-b"
-            style={{ borderColor: "rgba(255,255,255,0.07)" }}
+      <div
+        className="flex px-8 mb-5 flex-shrink-0 border-b"
+        style={{ borderColor: "rgba(255,255,255,0.07)" }}
+      >
+        {tabDef.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
+            style={{
+              color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
+              borderColor: activeTab === t.id ? "#E8842A" : "transparent",
+              background: "transparent",
+              whiteSpace: "nowrap",
+            }}
           >
-            {tabDef.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium cursor-pointer transition-all border-b-2 -mb-px"
+            {t.label}
+            {tabCounts[t.id] > 0 && (
+              <span
+                className="px-1.5 py-0.5 rounded-full text-xs font-bold tabular-nums"
                 style={{
-                  color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.45)",
-                  borderColor: activeTab === t.id ? "#E8842A" : "transparent",
-                  background: "transparent",
-                  whiteSpace: "nowrap",
+                  background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)",
+                  color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)",
+                  fontSize: 10,
                 }}
               >
-                {t.label}
-                {tabCounts[t.id] > 0 && (
-                  <span
-                    className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                    style={{
-                      background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.15)",
-                      color: activeTab === t.id ? "white" : "rgba(255,255,255,0.5)",
-                      fontSize: 10,
-                    }}
-                  >
-                    {tabCounts[t.id]}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        );
-      })()}
+                {tabCounts[t.id]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-8 space-y-3">
+      <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-3">
 
-        {/* No provider connected → big CTA with both options */}
+        {/* No provider connected */}
         {noProviderConnected && (
           <div className="flex flex-col items-center justify-center py-12 gap-6 text-center">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl">
               ✉️
             </div>
             <div>
-              <p className="text-foreground font-semibold text-lg mb-1">
-                Connectez votre boîte mail
-              </p>
+              <p className="text-foreground font-semibold text-lg mb-1">Connectez votre boîte mail</p>
               <p className="text-sm text-muted-foreground max-w-xs">
                 Iris lit vos emails et détecte automatiquement les rendez-vous pour alléger votre charge mentale.
               </p>
@@ -483,12 +643,7 @@ export default function EmailsPage() {
                 disabled={connectingOutlook}
                 className="flex items-center justify-center gap-2.5 w-full px-6 py-3 rounded-xl border border-border bg-card text-foreground text-sm font-semibold hover:bg-accent transition-colors disabled:opacity-50"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
-                  <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
-                  <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
-                  <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
-                </svg>
+                <MicrosoftIcon />
                 {connectingOutlook ? "Redirection…" : "Connecter Outlook"}
               </button>
             </div>
@@ -518,7 +673,7 @@ export default function EmailsPage() {
           </div>
         )}
 
-        {/* Fetch error (not "no provider") */}
+        {/* Fetch error */}
         {error && !noProviderConnected && emailErrorStatus !== 404 && (
           <div className="text-center py-16 text-red-400 text-sm">
             Erreur de chargement des emails. Réessayez plus tard.
@@ -532,14 +687,51 @@ export default function EmailsPage() {
           </div>
         )}
 
-        {/* Email list — filtered by active tab */}
-        {emails
-          ?.filter((e) => (e.category ?? "info") === activeTab)
-          .map((email) => (
-            <EmailCard key={email.message_id ?? email.subject} email={email} />
-          ))}
+        {/* Empty tab */}
+        {anyConnected && !isLoading && emails && emails.length > 0 && filteredEmails.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground/50 text-sm">
+            Aucun email dans cette catégorie.
+          </div>
+        )}
 
-        {/* "Connect Outlook too" nudge — shown when only Gmail is connected */}
+        {/* Email list */}
+        {pagedEmails.map((email) => {
+          const globalIdx = getGlobalIndex(email);
+          return (
+            <EmailCard
+              key={email.message_id ?? email.subject}
+              email={email}
+              index={globalIdx}
+              isIrisActive={isIrisActive}
+              onOpen={() => setOpenEmail({ email, index: globalIdx })}
+            />
+          );
+        })}
+
+        {/* Pagination */}
+        {filteredEmails.length > EMAILS_PER_PAGE && (
+          <div className="flex items-center justify-center gap-3 pt-2 pb-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Connect Outlook nudge */}
         {gmailConnected && !outlookConnected && !noProviderConnected && (
           <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
             <Plug size={16} className="text-muted-foreground flex-shrink-0" />
@@ -558,7 +750,7 @@ export default function EmailsPage() {
           </div>
         )}
 
-        {/* "Connect Gmail too" nudge — shown when only Outlook is connected */}
+        {/* Connect Gmail nudge */}
         {outlookConnected && !gmailConnected && !noProviderConnected && (
           <div className="mt-2 flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border bg-muted/20">
             <Plug size={16} className="text-muted-foreground flex-shrink-0" />
@@ -577,6 +769,30 @@ export default function EmailsPage() {
           </div>
         )}
       </div>
+
+      {/* Email detail modal */}
+      {openEmail && (
+        <EmailDetailModal
+          email={openEmail.email}
+          index={openEmail.index}
+          onClose={() => setOpenEmail(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline Microsoft icon (avoids external dep)
+// ---------------------------------------------------------------------------
+
+function MicrosoftIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+      <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+      <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+      <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+    </svg>
   );
 }

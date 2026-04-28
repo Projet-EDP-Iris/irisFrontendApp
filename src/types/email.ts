@@ -5,5 +5,6 @@ export interface EmailItem {
   sender: string | null;
   date: string | null;
   category?: string; // "rdv" | "action" | "attente" | "bonsplans" | "info"
-  db_id?: number;   // DB primary key — present when backend has stored the email
+  db_id?: number;
+  provider?: "gmail" | "outlook" | "unknown";
 }
