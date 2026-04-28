@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "wouter";
+import { IrisLogo } from "@/components/IrisLogo";
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -52,7 +53,7 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-gray-700">
                   Mot de passe
                 </label>
-                <button type="button" className="text-sm text-orange-500 hover:underline">
+                <button type="button" className="hidden text-sm text-orange-500 hover:underline">
                   mot de passe oublié
                 </button>
               </div>
@@ -64,7 +65,7 @@ export default function LoginPage() {
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="hidden flex items-center gap-2">
               <input
                 type="checkbox"
                 id="remember"
@@ -101,14 +102,7 @@ export default function LoginPage() {
 
         {/* Iris logo bottom left */}
         <div className="absolute bottom-6 left-8 flex items-center gap-1.5">
-          <div className="w-8 h-8 relative">
-            <svg viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="14" stroke="#f97316" strokeWidth="2" />
-              <circle cx="16" cy="16" r="8" fill="#f97316" opacity="0.3" />
-              <path d="M16 8 C22 12, 22 20, 16 24 C10 20, 10 12, 16 8Z" fill="#f97316" opacity="0.6" />
-              <circle cx="16" cy="16" r="3" fill="#f97316" />
-            </svg>
-          </div>
+          <IrisLogo className="w-8 h-8" />
           <div>
             <div className="text-xs font-bold text-gray-600">iris</div>
             <div className="text-[9px] text-gray-400">Beta v0.1.0</div>
@@ -193,7 +187,7 @@ export default function LoginPage() {
             </div>
 
             <button
-              className="w-full mt-4 py-3 rounded-xl text-white font-semibold text-sm"
+              className="hidden w-full mt-4 py-3 rounded-xl text-white font-semibold text-sm"
               style={{ background: "rgba(249, 115, 22, 0.9)" }}
             >
               Add New App

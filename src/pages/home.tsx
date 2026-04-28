@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 
 import { useAuth } from "@/context/AuthContext";
+import { IrisLogo } from "@/components/IrisLogo";
 
 export default function HomePage() {
   const [, navigate] = useLocation();
@@ -177,12 +178,7 @@ export default function HomePage() {
 
       {/* Iris logo bottom right */}
       <div className="absolute bottom-6 right-8 flex items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
-        <div className="w-10 h-10 relative">
-          <svg viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="14" stroke="#f97316" strokeWidth="1.5" />
-            <path d="M16 8 C22 12, 22 20, 16 24 C10 20, 10 12, 16 8Z" fill="#f97316" />
-          </svg>
-        </div>
+        <IrisLogo className="w-10 h-10" />
         <div>
           <div className="text-xs font-bold text-primary/70 uppercase tracking-tighter">iris</div>
           <div className="text-[9px] text-muted-foreground">Beta v0.1.0</div>

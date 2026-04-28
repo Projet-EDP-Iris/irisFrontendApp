@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron'
 import fs from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
 import path from 'path'
@@ -14,6 +14,41 @@ const rendererEntry = path.join(distDir, 'index.html')
 
 const isDev = !app.isPackaged
 const rendererEntryUrl = pathToFileURL(rendererEntry).toString()
+
+function handleDeepLink(url) {
+  try {
+    const parsed = new URL(url)
+    const params = Object.fromEntries(parsed.searchParams.entries())
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('iris:oauth-callback', params)
+      win.focus()
+    }
+  } catch {}
+}
+
+// Register iris:// as a custom protocol so the OS routes deep links to this app.
+// On macOS this fires open-url; on Windows it launches a second instance with the URL as a CLI arg.
+app.setAsDefaultProtocolClient('iris')
+
+// macOS: deep link arrives while the app is already running
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
+
+// Windows: enforce single instance and receive the deep link URL from the second instance's CLI args
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    const url = commandLine.find(arg => arg.startsWith('iris://'))
+    if (url) handleDeepLink(url)
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) { if (win.isMinimized()) win.restore(); win.focus() }
+  })
+}
 
 function isAllowedRendererNavigation(url) {
   try {
@@ -113,6 +148,8 @@ function createWindow() {
     win.show()
   })
 }
+
+ipcMain.handle('iris:open-external', (_event, url) => shell.openExternal(url))
 
 ipcMain.handle('iris:notify-signup-success', (_event, payload = {}) => {
   if (!Notification.isSupported()) {

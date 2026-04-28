@@ -11,6 +11,8 @@ declare global {
         shown: boolean;
         reason?: string;
       }>;
+      openExternal: (url: string) => Promise<void>;
+      onOAuthCallback: (callback: (params: Record<string, string>) => void) => () => void;
     };
   }
 }
