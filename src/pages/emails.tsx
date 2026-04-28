@@ -84,6 +84,7 @@ function EmailPanel({
   const [confirmed, setConfirmed] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
 
   const category = email.category ?? "info";
   const dateStr = fmtDate(email.date, true);
@@ -106,10 +107,22 @@ function EmailPanel({
     if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
     setLoading(true);
     try {
-      await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0 }) });
+      const result = await apiFetch<any>(`/calendar/confirm/${email.db_id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot_index: 0 }),
+      });
+      if (result?.slot?.start_time) {
+        const d = new Date(result.slot.start_time);
+        setConfirmedDate(d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+      }
       setConfirmed(true);
-    } catch { setConfirmed(true); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error("Calendar confirm failed:", err);
+      alert("Erreur lors de l'ajout au calendrier. Vérifie que ton calendrier est bien connecté !");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const providerLabel = email.provider === "gmail" ? "Gmail" : email.provider === "outlook" ? "Outlook" : null;
@@ -117,7 +130,19 @@ function EmailPanel({
 
   function renderAction() {
     if (category === "rdv") {
-      if (confirmed) return <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold"><CheckCircle2 size={16}/><span>RDV ajouté ✓</span></div>;
+      if (confirmed) {
+        return (
+          <div className="flex flex-col items-center gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} />
+              <span>RDV ajouté à Google Calendar ✓</span>
+            </div>
+            {confirmedDate && (
+              <span className="text-xs font-normal opacity-80">Prévu le : {confirmedDate}</span>
+            )}
+          </div>
+        );
+      }
       return (
         <button onClick={handleConfirm} disabled={loading} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
           {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={15}/>}
