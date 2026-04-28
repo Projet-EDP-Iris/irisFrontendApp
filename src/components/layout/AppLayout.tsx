@@ -147,7 +147,7 @@ const labelVariants = {
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
+  const { logout, user, emailCount } = useAuth();
   const selectedIcon = getProfileIconById(user?.profile_icon);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -223,9 +223,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       animate="visible"
                       exit="hidden"
                       transition={{ duration: 0.18, delay: 0.06 }}
-                      className="whitespace-nowrap overflow-hidden"
+                      className="whitespace-nowrap overflow-hidden flex items-center gap-2 flex-1"
                     >
                       {item.label}
+                      {item.path === "/emails" && emailCount > 0 && (
+                        <span
+                          className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums leading-none"
+                          style={{
+                            background: isActive ? "rgba(255,255,255,0.25)" : "rgba(232,132,42,0.2)",
+                            color: isActive ? "white" : "#E8842A",
+                          }}
+                        >
+                          {emailCount}
+                        </span>
+                      )}
                     </motion.span>
                   )}
                 </AnimatePresence>
