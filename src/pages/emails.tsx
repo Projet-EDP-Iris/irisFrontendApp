@@ -74,6 +74,7 @@ function EmailCard({ email }: { email: EmailItem }) {
   const [confirmed, setConfirmed] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
 
   const category = email.category ?? "info";
   const subject = email.subject ?? "(Sans objet)";
@@ -90,15 +91,19 @@ function EmailCard({ email }: { email: EmailItem }) {
     }
     setLoading(true);
     try {
-      await apiFetch(`/calendar/confirm/${email.db_id}`, {
+      const result = await apiFetch<any>(`/calendar/confirm/${email.db_id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slot_index: 0 }),
       });
+      if (result?.slot?.start_time) {
+        const d = new Date(result.slot.start_time);
+        setConfirmedDate(d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+      }
       setConfirmed(true);
     } catch (err) {
       console.error("Calendar confirm failed:", err);
-      setConfirmed(true);
+      alert("Erreur lors de l'ajout au calendrier. Vérifie que ton calendrier est bien connecté !");
     } finally {
       setLoading(false);
     }
@@ -109,9 +114,14 @@ function EmailCard({ email }: { email: EmailItem }) {
     if (category === "rdv") {
       if (confirmed) {
         return (
-          <div className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-            <CheckCircle2 size={16} />
-            <span>RDV ajouté à Google Calendar ✓</span>
+          <div className="flex flex-col items-center gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} />
+              <span>RDV ajouté à Google Calendar ✓</span>
+            </div>
+            {confirmedDate && (
+              <span className="text-xs font-normal opacity-80">Prévu le : {confirmedDate}</span>
+            )}
           </div>
         );
       }
