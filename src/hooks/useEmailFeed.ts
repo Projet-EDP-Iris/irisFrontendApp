@@ -33,5 +33,6 @@ export function useEmailFeed(enabled = true) {
     enabled,
     retry: false,
     staleTime: 60_000,
+    refetchInterval: 3 * 60 * 1000,
   });
 }

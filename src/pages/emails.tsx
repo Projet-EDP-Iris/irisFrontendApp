@@ -373,6 +373,7 @@ export default function EmailsPage() {
   const {
     data: feedData,
     isLoading: feedLoading,
+    isFetching,
     error,
     fetchNextPage,
     hasNextPage,
@@ -381,7 +382,7 @@ export default function EmailsPage() {
 
   const allEmails = feedData?.pages.flatMap((p) => p.emails) ?? [];
   const isLoading = feedLoading;
-  const isRefreshing = false;
+  const isRefreshing = isFetching && !feedLoading;
 
   // Compute tab counts over ALL loaded emails
   const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };

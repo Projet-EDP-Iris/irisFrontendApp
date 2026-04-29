@@ -84,6 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email: email.trim(), password }),
     });
     localStorage.setItem("iris_token", data.access_token);
+    // Reset any per-user UI state from a previous session so a different user
+    // doesn't inherit stale preferences (gmail_enabled, cached queries, etc.).
+    localStorage.removeItem("gmail_enabled");
+    queryClient.clear();
     setToken(data.access_token);
     const me = await apiFetch<User>("/users/me");
     setUser(me);
