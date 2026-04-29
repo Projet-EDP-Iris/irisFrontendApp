@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('irisDesktop', {
   notifySignupSuccess: (payload) => ipcRenderer.invoke('iris:notify-signup-success', payload),

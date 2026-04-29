@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 import { clearSignupDraft } from "@/lib/signupDraft";
 import { notifySignupSuccess } from "@/lib/desktopNotifications";
 
@@ -116,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem("iris_token");
     localStorage.removeItem("iris_active");
+    localStorage.removeItem("gmail_enabled");
+    queryClient.clear();
     setToken(null);
     setUser(null);
     setIsIrisActiveState(false);

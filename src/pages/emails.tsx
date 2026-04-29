@@ -12,6 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
+
 // ---------------------------------------------------------------------------
 // OAuth callback helpers
 // ---------------------------------------------------------------------------
@@ -86,6 +87,7 @@ function EmailPanel({
   const [loading, setLoading] = useState(false);
   const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
   const [confirmedSubject, setConfirmedSubject] = useState<string | null>(null);
+  const [confirmedProvider, setConfirmedProvider] = useState<string | null>(null);
 
   const category = email.category ?? "info";
   const dateStr = fmtDate(email.date, true);
@@ -115,9 +117,11 @@ function EmailPanel({
       });
       if (result?.slot?.start_time) {
         const d = new Date(result.slot.start_time);
-        setConfirmedDate(d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+        setConfirmedDate(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
       }
       setConfirmedSubject(email.subject ?? null);
+      const successProviders: string[] = (result?.providers ?? []).filter((p: any) => !p.error).map((p: any) => p.provider === "google" ? "Google Calendar" : p.provider === "outlook" ? "Outlook Calendar" : p.provider);
+      setConfirmedProvider(successProviders.length > 0 ? successProviders.join(" + ") : null);
       const failedProviders = result?.providers?.filter((p: any) => p.error);
       if (failedProviders?.length) {
         console.warn("Some calendar providers failed:", failedProviders);
@@ -141,13 +145,13 @@ function EmailPanel({
           <div className="flex flex-col gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} />
-              <span>Ajouté au calendrier ✓</span>
+              <span>Ajouté à {confirmedProvider ?? "votre calendrier"} ✓</span>
             </div>
             {confirmedSubject && (
               <span className="text-xs font-normal opacity-90 truncate">{confirmedSubject}</span>
             )}
             {confirmedDate && (
-              <span className="text-xs font-normal opacity-70">Prévu le : {confirmedDate}</span>
+              <span className="text-xs font-normal opacity-70">Prévu le {confirmedDate}</span>
             )}
           </div>
         );
@@ -368,15 +372,16 @@ export default function EmailsPage() {
 
   const {
     data: feedData,
-    isLoading,
+    isLoading: feedLoading,
     error,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useEmailFeed(anyConnected);
 
-  // Flatten all pages
   const allEmails = feedData?.pages.flatMap((p) => p.emails) ?? [];
+  const isLoading = feedLoading;
+  const isRefreshing = false;
 
   // Compute tab counts over ALL loaded emails
   const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
@@ -470,7 +475,14 @@ export default function EmailsPage() {
 
   async function handleConnectOutlook() {
     setConnectingOutlook(true);
-    try { const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft"); window.location.href = auth_url; }
+    try {
+      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
+      if (window.irisDesktop?.openExternal) {
+        window.irisDesktop.openExternal(auth_url);
+      } else {
+        window.location.href = auth_url;
+      }
+    }
     catch { setStatusMsg({ text: "Impossible de démarrer la connexion Outlook. Vérifiez la config backend.", ok: false }); setConnectingOutlook(false); }
   }
 
@@ -485,8 +497,14 @@ export default function EmailsPage() {
       <div className="flex items-center justify-between px-6 pt-6 pb-3 flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-foreground">Emails</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
             {gmailConnected && outlookConnected ? "Gmail + Outlook" : gmailConnected ? "Gmail" : outlookConnected ? "Outlook" : "Connectez une boîte mail"}
+            {isRefreshing && (
+              <span className="flex items-center gap-1 text-[10px] text-primary/70">
+                <span className="w-2 h-2 border border-primary/60 border-t-transparent rounded-full animate-spin" />
+                Actualisation…
+              </span>
+            )}
           </p>
         </div>
 
