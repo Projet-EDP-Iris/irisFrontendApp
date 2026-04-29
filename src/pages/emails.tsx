@@ -3,7 +3,7 @@ import {
   Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen,
   X, ArrowLeft,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
@@ -380,8 +380,20 @@ export default function EmailsPage() {
     isFetchingNextPage,
   } = useEmailFeed(anyConnected);
 
-  const allEmails = feedData?.pages.flatMap((p) => p.emails) ?? [];
-  const isLoading = feedLoading;
+  // Fast cached read — shows last-known emails instantly while the feed loads in background
+  const { data: cachedData } = useQuery({
+    queryKey: ["emails-cached"],
+    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>("/emails/cached?limit=50"),
+    enabled: anyConnected,
+    staleTime: 30_000,
+  });
+
+  const allEmails =
+    feedData?.pages.flatMap((p) => p.emails) ??
+    cachedData?.emails ??
+    [];
+  // Don't show the full-page spinner when cached emails are already available
+  const isLoading = feedLoading && !cachedData?.emails?.length;
   const isRefreshing = isFetching && !feedLoading;
 
   // Compute tab counts over ALL loaded emails

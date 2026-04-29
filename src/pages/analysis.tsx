@@ -10,6 +10,8 @@ function DonutChart({ data }: { data: { name: string; value: number; color: stri
   const gap = 3;
   const total = data.reduce((s, d) => s + d.value, 0);
 
+  if (total === 0) return <svg width={size} height={size} />;
+
   let angle = -90;
   const slices = data.map((d) => {
     const sliceDeg = (d.value / total) * 360;
