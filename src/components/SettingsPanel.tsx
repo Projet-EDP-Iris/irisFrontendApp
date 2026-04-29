@@ -30,7 +30,7 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
-  const { connected: gmailConnected, gmailEmail, enabled: gmailEnabled, enable: enableGmail, disable: disableGmail } = useGmailConnection();
+  const { connected: gmailConnected, gmailEmail, disconnecting, disconnect: disconnectGmail } = useGmailConnection();
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [desktopNotif, setDesktopNotif] = useState(isDesktopNotificationsEnabled());
   const [soundAlerts, setSoundAlerts] = useState(isSoundAlertsEnabled());
@@ -46,18 +46,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const isEmailDirty = email.trim() !== initialEmail.trim();
   const isIconDirty = selectedIcon !== getProfileIconById(user?.profile_icon).id;
   const hasProfileChanges = isNameDirty || isEmailDirty || isIconDirty;
-
-  function handleGmailToggle() {
-    if (gmailEnabled) {
-      disableGmail();
-    } else {
-      if (gmailConnected) {
-        enableGmail();
-      } else {
-        setShowGmailModal(true);
-      }
-    }
-  }
 
   const handleSaveProfile = async () => {
     if (!hasProfileChanges) {
@@ -186,66 +174,77 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               </div>
               <div className="space-y-2">
 
-                {/* Gmail — live */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2.5 border bg-card border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
+                {/* Gmail */}
+                <div className="rounded-xl border bg-card border-border overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
                       <Mail size={14} className="text-primary" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-foreground">Gmail</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {gmailConnected ? (gmailEmail ?? "Connected") : "Not connected"}
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {gmailConnected ? (gmailEmail ?? "Connecté") : "Non connecté"}
                       </div>
                     </div>
+                    {gmailConnected ? (
+                      <button
+                        onClick={disconnectGmail}
+                        disabled={disconnecting}
+                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 flex-shrink-0 border border-border/60 rounded-lg px-2 py-1"
+                      >
+                        {disconnecting ? "..." : "Déconnecter"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowGmailModal(true)}
+                        className="text-[10px] text-primary hover:opacity-80 transition-opacity flex-shrink-0 border border-primary/40 rounded-lg px-2 py-1"
+                      >
+                        Connecter
+                      </button>
+                    )}
                   </div>
-                  <Toggle enabled={gmailEnabled && gmailConnected} onClick={handleGmailToggle} />
                 </div>
 
-                {/* Google Calendar — static for now */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2.5 border bg-card border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
+                {/* Google Calendar */}
+                <div className="rounded-xl border bg-card border-border overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
                       <Calendar size={14} className="text-primary" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-foreground">Google Calendar</div>
                       <div className="text-[10px] text-muted-foreground">
-                        {gmailConnected ? "Connected via Gmail" : "Requires Gmail"}
+                        {gmailConnected ? "Connecté via Gmail" : "Requiert Gmail"}
                       </div>
                     </div>
+                    <span className={`text-[10px] flex-shrink-0 px-2 py-1 rounded-lg border ${gmailConnected ? "text-primary border-primary/30 bg-primary/5" : "text-muted-foreground border-border/40 opacity-50"}`}>
+                      {gmailConnected ? "Actif" : "Inactif"}
+                    </span>
                   </div>
-                  <Toggle enabled={gmailConnected} onClick={() => {}} disabled />
                 </div>
 
                 {/* Outlook — not implemented */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2.5 border bg-card/35 border-border/60 opacity-60">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <div className="w-4 h-4 rounded bg-blue-500 flex items-center justify-center">
-                        <span className="text-white text-[8px] font-bold">O</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-foreground">Outlook</div>
-                      <div className="text-[10px] text-muted-foreground">Demo indisponible</div>
+                <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-card/30 border-border/50 opacity-50 cursor-not-allowed">
+                  <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                    <div className="w-4 h-4 rounded bg-blue-500/70 flex items-center justify-center">
+                      <span className="text-white text-[8px] font-bold">O</span>
                     </div>
                   </div>
-                  <Toggle enabled={false} onClick={() => {}} disabled />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground">Outlook</div>
+                    <div className="text-[10px] text-muted-foreground">Bientôt disponible</div>
+                  </div>
                 </div>
 
                 {/* Apple Calendar — not implemented */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2.5 border bg-card/35 border-border/60 opacity-60">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-gray-500/20 flex items-center justify-center">
-                      <Calendar size={14} className="text-gray-400" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-foreground">Apple Calendar</div>
-                      <div className="text-[10px] text-muted-foreground">Demo indisponible</div>
-                    </div>
+                <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-card/30 border-border/50 opacity-50 cursor-not-allowed">
+                  <div className="w-7 h-7 rounded-lg bg-gray-500/15 flex items-center justify-center flex-shrink-0">
+                    <Calendar size={14} className="text-muted-foreground" />
                   </div>
-                  <Toggle enabled={false} onClick={() => {}} disabled />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground">Apple Calendar</div>
+                    <div className="text-[10px] text-muted-foreground">Bientôt disponible</div>
+                  </div>
                 </div>
 
               </div>

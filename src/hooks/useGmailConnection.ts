@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
@@ -14,6 +15,7 @@ function getStoredEnabled(): boolean {
 
 export function useGmailConnection() {
   const queryClient = useQueryClient();
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const { data: status, isLoading, error, refetch } = useQuery<GmailStatus>({
     queryKey: ["gmail-status"],
@@ -33,14 +35,28 @@ export function useGmailConnection() {
     queryClient.setQueryData(ENABLED_KEY, value);
   };
 
+  const disconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await apiFetch("/auth/google", { method: "DELETE" });
+      localStorage.setItem("gmail_enabled", "false");
+      queryClient.setQueryData(ENABLED_KEY, false);
+      await queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   return {
     connected: status?.connected ?? false,
     gmailEmail: status?.gmail_email ?? null,
     enabled,
     isLoading,
+    disconnecting,
     error,
     enable: () => setEnabled(true),
     disable: () => setEnabled(false),
+    disconnect,
     refetchStatus: refetch,
   };
 }
