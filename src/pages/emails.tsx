@@ -681,10 +681,7 @@ export default function EmailsPage() {
             <EmailPanel email={selectedEmail} onClose={() => setSelectedEmail(null)} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 opacity-20 select-none pointer-events-none">
-              <svg viewBox="0 0 32 32" fill="none" className="w-16 h-16">
-                <circle cx="16" cy="16" r="14" stroke="#f97316" strokeWidth="1.5" />
-                <path d="M16 8 C22 12, 22 20, 16 24 C10 20, 10 12, 16 8Z" fill="#f97316" />
-              </svg>
+              <img src="./icon.png" alt="" className="w-16 h-16 object-contain" />
               <p className="text-sm text-muted-foreground font-medium">Sélectionnez un email</p>
             </div>
           )}
