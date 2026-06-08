@@ -2,6 +2,43 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { getSignupDraft, patchSignupDraft } from "@/lib/signupDraft";
 import { IrisLogo } from "@/components/IrisLogo";
+import { ChevronDown } from "lucide-react";
+
+const TERMS_TEXT = `CONDITIONS GÉNÉRALES D'UTILISATION – IRIS
+Version 1.0 — Juin 2026
+
+1. PRÉSENTATION DU SERVICE
+Iris est une application de gestion intelligente d'emails et de calendrier intégrant des fonctionnalités d'intelligence artificielle pour l'analyse, le tri et la synthèse de vos communications. Iris est édité par son équipe de développement et proposé en version bêta.
+
+2. ACCEPTATION DES CONDITIONS
+L'utilisation du service est soumise à l'acceptation sans réserve des présentes conditions. En cochant la case d'acceptation, vous reconnaissez avoir lu, compris et accepté l'ensemble de ces dispositions.
+
+3. CRÉATION DE COMPTE
+Pour accéder au service, vous devez créer un compte avec une adresse e-mail valide et un mot de passe sécurisé. Vous êtes seul responsable de la confidentialité de vos identifiants. Toute activité réalisée depuis votre compte est réputée effectuée par vous.
+
+4. CONNEXION AUX SERVICES TIERS
+Iris vous permet de connecter vos comptes Gmail, Outlook et Apple Calendar via OAuth ou CalDAV. En autorisant ces connexions, vous consentez à ce qu'Iris accède à vos emails et événements de calendrier dans le seul but de vous fournir ses services. Ces accès sont révocables à tout moment depuis les paramètres de l'application ou depuis les réglages de votre compte tiers.
+
+5. DONNÉES PERSONNELLES
+Iris collecte et traite vos données personnelles (adresse e-mail, nom, contenu des emails si connectés) exclusivement pour vous fournir le service. Vos données sont stockées de manière sécurisée et ne sont jamais vendues ni transmises à des tiers à des fins commerciales. Conformément à la réglementation applicable, vous disposez d'un droit d'accès, de rectification, de portabilité et de suppression de vos données. Pour exercer ces droits, contactez-nous à l'adresse indiquée à l'article 11.
+
+6. USAGE ACCEPTABLE
+Il est interdit d'utiliser Iris à des fins illicites, frauduleuses ou nuisibles à des tiers. Toute tentative d'accès non autorisé aux systèmes d'Iris ou de contournement des mesures de sécurité est strictement interdite et pourra faire l'objet de poursuites.
+
+7. DISPONIBILITÉ DU SERVICE
+Iris est fourni « en l'état » pendant la phase bêta. L'équipe s'efforce de maintenir le service disponible mais ne garantit pas une disponibilité ininterrompue. Des interruptions ponctuelles pour maintenance ou amélioration peuvent survenir sans préavis.
+
+8. PROPRIÉTÉ INTELLECTUELLE
+L'ensemble des éléments composant Iris (code source, design, marque, logo) sont la propriété exclusive de ses créateurs. Toute reproduction, distribution ou modification non autorisée est interdite.
+
+9. RÉSILIATION
+Vous pouvez supprimer votre compte à tout moment depuis les paramètres de l'application. La suppression entraîne l'effacement de vos données personnelles dans un délai raisonnable. Iris se réserve le droit de suspendre ou résilier un compte en cas de violation des présentes conditions.
+
+10. MODIFICATIONS DES CONDITIONS
+Iris se réserve le droit de modifier les présentes conditions à tout moment. Les utilisateurs seront informés de toute modification substantielle par email ou notification in-app. La poursuite de l'utilisation du service après notification vaut acceptation des nouvelles conditions.
+
+11. CONTACT
+Pour toute question relative aux présentes conditions ou à vos données personnelles : support@irisapp.ai`;
 
 function validatePasswordPolicy(password: string): string | null {
   if (password.length < 8) {
@@ -21,6 +58,7 @@ export default function IrisSignup() {
   const [email, setEmail] = useState(initialDraft.email);
   const [password, setPassword] = useState(initialDraft.password);
   const [accepted, setAccepted] = useState(initialDraft.acceptedTerms);
+  const [showTerms, setShowTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, navigate] = useLocation();
 
@@ -69,10 +107,29 @@ export default function IrisSignup() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Choisissez un mot de passe" className="w-full px-4 py-3.5 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-300 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all" />
           </div>
 
-          <label className="flex items-center gap-3 mb-5 cursor-pointer select-none">
-            <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="w-4 h-4 rounded cursor-pointer accent-orange-500 flex-shrink-0" />
-            <span className="text-sm text-gray-500">J'accepte les conditions generales</span>
-          </label>
+          <div className="mb-5">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="w-4 h-4 rounded cursor-pointer accent-orange-500 flex-shrink-0 mt-0.5" />
+              <span className="text-sm text-gray-500">
+                J'accepte les{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowTerms((v) => !v)}
+                  className="text-orange-500 underline underline-offset-2 hover:text-orange-600 transition-colors inline-flex items-center gap-0.5"
+                >
+                  conditions générales d'utilisation
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showTerms ? "rotate-180" : ""}`} />
+                </button>
+              </span>
+            </label>
+            {showTerms && (
+              <div className="mt-3 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="h-48 overflow-y-auto p-4 bg-gray-50 text-xs text-gray-500 leading-relaxed whitespace-pre-wrap font-mono">
+                  {TERMS_TEXT}
+                </div>
+              </div>
+            )}
+          </div>
 
           <button onClick={handleContinue} className="w-full py-4 rounded-xl text-white font-semibold text-base transition-opacity hover:opacity-90 cursor-pointer" style={{ background: "linear-gradient(90deg, #FF5722 0%, #FF8C42 100%)" }}>
             Continuer

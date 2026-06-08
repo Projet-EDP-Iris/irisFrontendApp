@@ -48,6 +48,7 @@ export default function IrisConnectApps() {
         password: draft.password,
         name: draft.name,
         profile_icon: draft.profile_icon,
+        accepted_terms: draft.acceptedTerms,
       });
       setAccountCreated(true);
       return true;

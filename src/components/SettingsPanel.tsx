@@ -312,18 +312,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   </div>
                 </div>
 
-                {/* Outlook — not yet implemented */}
-                <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-card/30 border-border/50 opacity-50 cursor-not-allowed">
-                  <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center flex-shrink-0">
-                    <div className="w-4 h-4 rounded bg-blue-500/70 flex items-center justify-center">
-                      <span className="text-white text-[8px] font-bold">O</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">Outlook</div>
-                    <div className="text-[10px] text-muted-foreground">Bientôt disponible</div>
-                  </div>
-                </div>
 
                 {/* Apple Calendar */}
                 <div className="rounded-xl border bg-card border-border overflow-hidden">

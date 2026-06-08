@@ -15,15 +15,16 @@ const rendererEntry = path.join(distDir, 'index.html')
 const isDev = !app.isPackaged
 const rendererEntryUrl = pathToFileURL(rendererEntry).toString()
 
+let pendingDeepLink = null
+
 function handleDeepLink(url) {
   try {
     const parsed = new URL(url)
     const params = Object.fromEntries(parsed.searchParams.entries())
     const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      win.webContents.send('iris:oauth-callback', params)
-      win.focus()
-    }
+    if (!win) { pendingDeepLink = url; return }
+    win.webContents.send('iris:oauth-callback', params)
+    win.focus()
   } catch {}
 }
 
@@ -146,6 +147,10 @@ function createWindow() {
 
   win.once('ready-to-show', () => {
     win.show()
+    if (pendingDeepLink) {
+      handleDeepLink(pendingDeepLink)
+      pendingDeepLink = null
+    }
   })
 }
 
@@ -194,6 +199,12 @@ ipcMain.handle('iris:notify-gmail-connected', (_event, payload = {}) => {
 })
 
 app.whenReady().then(() => {
+  // Windows cold-start: app launched directly by OS via deep link (not second-instance)
+  if (process.platform !== 'darwin') {
+    const startUrl = process.argv.find(arg => arg.startsWith('iris://'))
+    if (startUrl) pendingDeepLink = startUrl
+  }
+
   createWindow()
 
   if (!isDev) {
