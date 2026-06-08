@@ -53,8 +53,12 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-gray-700">
                   Mot de passe
                 </label>
-                <button type="button" className="hidden text-sm text-orange-500 hover:underline">
-                  mot de passe oublié
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-sm text-orange-500 hover:underline"
+                >
+                  Mot de passe oublié ?
                 </button>
               </div>
               <input

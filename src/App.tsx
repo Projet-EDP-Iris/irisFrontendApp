@@ -12,6 +12,9 @@ import IrisSignup from "@/pages/signup/signup";
 import ProfileChoose from "@/pages/signup/profile_cchoose";
 import ConnectApp from "@/pages/signup/connect_app";
 import GoodbyePage from "@/pages/goodbye";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
+import EmailVerificationPage from "@/pages/verify-email";
 import HomePage from "@/pages/home";
 import EmailsPage from "@/pages/emails";
 import TasksPage from "@/pages/tasks";
@@ -44,6 +47,9 @@ function Router() {
       <Route path="/profile-choose" component={ProfileChoose} />
       <Route path="/ConnectApp" component={ConnectApp} />
       <Route path="/goodbye" component={GoodbyePage} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/verify-email" component={EmailVerificationPage} />
       <Route path="/HomePage" component={HomePage} />
       <Route path="/home">
         <ProtectedRoute>

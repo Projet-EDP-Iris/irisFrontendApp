@@ -1,4 +1,4 @@
-import { X, Mail, Calendar } from "lucide-react";
+import { X, Mail, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfileIconById, PROFILE_ICON_OPTIONS } from "@/constants/profileIcons";
@@ -8,7 +8,10 @@ import {
   setNotificationPreference,
 } from "@/lib/notificationPreferences";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
+import { useAppleCalendarConnection } from "@/hooks/useAppleCalendarConnection";
 import { GmailConnectModal } from "@/components/GmailConnectModal";
+import { AppleCalendarConnectModal } from "@/components/AppleCalendarConnectModal";
+import { apiFetch } from "@/lib/api";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -30,8 +33,10 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
-  const { connected: gmailConnected, gmailEmail, disconnecting, disconnect: disconnectGmail } = useGmailConnection();
+  const { connected: gmailConnected, gmailEmail, disconnecting: gmailDisconnecting, disconnect: disconnectGmail } = useGmailConnection();
+  const { connected: appleConnected, appleEmail, disconnecting: appleDisconnecting, disconnect: disconnectApple } = useAppleCalendarConnection();
   const [showGmailModal, setShowGmailModal] = useState(false);
+  const [showAppleModal, setShowAppleModal] = useState(false);
   const [desktopNotif, setDesktopNotif] = useState(isDesktopNotificationsEnabled());
   const [soundAlerts, setSoundAlerts] = useState(isSoundAlertsEnabled());
   const initialName = user?.name ?? user?.email?.split("@")[0] ?? "";
@@ -41,6 +46,14 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [selectedIcon, setSelectedIcon] = useState(getProfileIconById(user?.profile_icon).id);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // Change password state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
   const isNameDirty = name.trim() !== initialName.trim();
   const isEmailDirty = email.trim() !== initialEmail.trim();
@@ -65,6 +78,34 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage({ text: "Les mots de passe ne correspondent pas.", ok: false });
+      return;
+    }
+    setChangingPassword(true);
+    setPasswordMessage(null);
+    try {
+      await apiFetch("/users/me/change-password", {
+        method: "PATCH",
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      setPasswordMessage({ text: "Mot de passe mis à jour.", ok: true });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowChangePassword(false);
+    } catch (e) {
+      setPasswordMessage({
+        text: e instanceof Error ? e.message : "Erreur lors du changement de mot de passe",
+        ok: false,
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const handleDesktopNotifToggle = () => {
     const nextValue = !desktopNotif;
     setDesktopNotif(nextValue);
@@ -80,6 +121,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   return (
     <>
       {showGmailModal && <GmailConnectModal onClose={() => setShowGmailModal(false)} />}
+      {showAppleModal && <AppleCalendarConnectModal onClose={() => setShowAppleModal(false)} />}
 
       <div className="absolute inset-0 z-50 flex justify-end" onClick={onClose}>
         <div
@@ -136,9 +178,56 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   />
                 </div>
                 <div className="pt-1 space-y-2">
-                  <button className="hidden w-full rounded-xl py-2 text-xs font-medium border border-primary/35 text-primary hover:bg-primary/10 transition-colors">
+                  <button
+                    onClick={() => { setShowChangePassword((v) => !v); setPasswordMessage(null); }}
+                    className="w-full rounded-xl py-2 text-xs font-medium border border-primary/35 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center gap-1"
+                  >
                     Changer le mot de passe
+                    {showChangePassword ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                   </button>
+
+                  {showChangePassword && (
+                    <form onSubmit={handleChangePassword} className="space-y-2 pt-1">
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="Mot de passe actuel"
+                        required
+                        className="w-full bg-card/50 border border-border/70 rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Nouveau mot de passe"
+                        required
+                        className="w-full bg-card/50 border border-border/70 rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirmer le nouveau mot de passe"
+                        required
+                        className="w-full bg-card/50 border border-border/70 rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <button
+                        type="submit"
+                        disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                        className="w-full bg-primary text-primary-foreground rounded-xl py-2 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {changingPassword ? "Mise à jour..." : "Confirmer le changement"}
+                      </button>
+                    </form>
+                  )}
+
+                  {passwordMessage && (
+                    <p className={`text-xs ${passwordMessage.ok ? "text-primary" : "text-destructive"}`}>
+                      {passwordMessage.text}
+                    </p>
+                  )}
+
                   <button
                     onClick={handleSaveProfile}
                     disabled={saving || !hasProfileChanges}
@@ -189,10 +278,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                     {gmailConnected ? (
                       <button
                         onClick={disconnectGmail}
-                        disabled={disconnecting}
+                        disabled={gmailDisconnecting}
                         className="text-[10px] text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 flex-shrink-0 border border-border/60 rounded-lg px-2 py-1"
                       >
-                        {disconnecting ? "..." : "Déconnecter"}
+                        {gmailDisconnecting ? "..." : "Déconnecter"}
                       </button>
                     ) : (
                       <button
@@ -223,7 +312,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   </div>
                 </div>
 
-                {/* Outlook — not implemented */}
+                {/* Outlook — not yet implemented */}
                 <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-card/30 border-border/50 opacity-50 cursor-not-allowed">
                   <div className="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center flex-shrink-0">
                     <div className="w-4 h-4 rounded bg-blue-500/70 flex items-center justify-center">
@@ -236,14 +325,34 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   </div>
                 </div>
 
-                {/* Apple Calendar — not implemented */}
-                <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border bg-card/30 border-border/50 opacity-50 cursor-not-allowed">
-                  <div className="w-7 h-7 rounded-lg bg-gray-500/15 flex items-center justify-center flex-shrink-0">
-                    <Calendar size={14} className="text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">Apple Calendar</div>
-                    <div className="text-[10px] text-muted-foreground">Bientôt disponible</div>
+                {/* Apple Calendar */}
+                <div className="rounded-xl border bg-card border-border overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                      <Calendar size={14} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-foreground">Apple Calendar</div>
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {appleConnected ? (appleEmail ?? "Connecté") : "Non connecté"}
+                      </div>
+                    </div>
+                    {appleConnected ? (
+                      <button
+                        onClick={disconnectApple}
+                        disabled={appleDisconnecting}
+                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 flex-shrink-0 border border-border/60 rounded-lg px-2 py-1"
+                      >
+                        {appleDisconnecting ? "..." : "Déconnecter"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowAppleModal(true)}
+                        className="text-[10px] text-primary hover:opacity-80 transition-opacity flex-shrink-0 border border-primary/40 rounded-lg px-2 py-1"
+                      >
+                        Connecter
+                      </button>
+                    )}
                   </div>
                 </div>
 
