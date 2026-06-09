@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
@@ -86,11 +86,17 @@ function cardClass(provider?: string) {
 // Shared types
 
 type ReplyVariant = { label: string; content: string };
-type PanelMode = "read" | "summary" | "reply";
+type PanelMode = "read" | "summary" | "reply" | "compose";
 
 // Reply variants display (used inside EmailPanel in reply mode)
 
-function ReplyVariantsView({ variants }: { variants: ReplyVariant[] }) {
+function ReplyVariantsView({
+  variants,
+  onSelect,
+}: {
+  variants: ReplyVariant[];
+  onSelect?: (content: string) => void;
+}) {
   const [copied, setCopied] = useState<string | null>(null);
 
   if (!variants.length) {
@@ -110,22 +116,138 @@ function ReplyVariantsView({ variants }: { variants: ReplyVariant[] }) {
         <div key={v.label} className="p-3 rounded-xl border border-border/40 bg-muted/20">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-semibold text-foreground/70">{v.label}</span>
-            <button
-              onClick={() => {
-                void navigator.clipboard.writeText(v.content);
-                setCopied(v.label);
-                setTimeout(() => setCopied(null), 1500);
-              }}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {copied === v.label ? "Copié ✓" : "Copier"}
-            </button>
+            <div className="flex items-center gap-2">
+              {onSelect && (
+                <button
+                  onClick={() => onSelect(v.content)}
+                  className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                >
+                  Utiliser →
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(v.content);
+                  setCopied(v.label);
+                  setTimeout(() => setCopied(null), 1500);
+                }}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {copied === v.label ? "Copié ✓" : "Copier"}
+              </button>
+            </div>
           </div>
           <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
             {v.content}
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Reply composer — shown after user selects a variant
+
+function ReplyComposer({
+  email,
+  initialText,
+  onBack,
+  onSent,
+}: {
+  email: EmailItem;
+  initialText: string;
+  onBack: () => void;
+  onSent: () => void;
+}) {
+  const [text, setText] = useState(initialText);
+  const [files, setFiles] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleSend() {
+    if (!email.db_id) { setError("Identifiant email manquant."); return; }
+    setSending(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("reply_text", text);
+      for (const f of files) form.append("attachments", f);
+      const token = localStorage.getItem("iris_token");
+      const resp = await fetch(`${API_BASE_URL}/emails/reply/${email.db_id}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "Erreur lors de l'envoi.");
+      }
+      onSent();
+    } catch (err) {
+      setError((err as Error).message ?? "Erreur lors de l'envoi.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full gap-3 px-5 py-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
+      >
+        <ArrowLeft size={13} /> Retour aux suggestions
+      </button>
+
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        Rédiger la réponse
+      </p>
+
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="flex-1 w-full rounded-xl border border-border/40 bg-muted/20 p-3 text-sm text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/50"
+        placeholder="Votre réponse…"
+      />
+
+      <div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+        >
+          {files.length > 0 ? `${files.length} fichier(s) joint(s)` : "Joindre des fichiers"}
+        </button>
+        {files.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {files.map((f) => (
+              <li key={f.name} className="text-[10px] text-muted-foreground/70 truncate">{f.name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      <button
+        onClick={() => void handleSend()}
+        disabled={sending || !text.trim()}
+        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+        style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+      >
+        {sending ? (
+          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Envoi…</>
+        ) : (
+          "Envoyer la réponse"
+        )}
+      </button>
     </div>
   );
 }
@@ -138,12 +260,18 @@ function EmailPanel({
   mode = "read",
   summary = null,
   replyVariants = null,
+  composerText = "",
+  onSelectVariant,
+  onModeChange,
 }: {
   email: EmailItem;
   onClose: () => void;
   mode?: PanelMode;
   summary?: string | null;
   replyVariants?: ReplyVariant[] | null;
+  composerText?: string;
+  onSelectVariant?: (text: string) => void;
+  onModeChange?: (mode: PanelMode) => void;
 }) {
   const [body, setBody] = useState<string | null>(null);
   const [bodyLoading, setBodyLoading] = useState(false);
@@ -219,7 +347,26 @@ function EmailPanel({
     }
 
     if (mode === "reply") {
-      return <ReplyVariantsView variants={replyVariants ?? []} />;
+      return (
+        <ReplyVariantsView
+          variants={replyVariants ?? []}
+          onSelect={(content) => {
+            onSelectVariant?.(content);
+            onModeChange?.("compose");
+          }}
+        />
+      );
+    }
+
+    if (mode === "compose") {
+      return (
+        <ReplyComposer
+          email={email}
+          initialText={composerText}
+          onBack={() => onModeChange?.("reply")}
+          onSent={() => { onModeChange?.("read"); }}
+        />
+      );
     }
 
     // Default: read mode
@@ -233,7 +380,7 @@ function EmailPanel({
   }
 
   // Mode label shown in the panel header
-  const modeLabel = mode === "summary" ? "Résumé" : mode === "reply" ? "Réponses suggérées" : null;
+  const modeLabel = mode === "summary" ? "Résumé" : mode === "reply" ? "Réponses suggérées" : mode === "compose" ? "Rédiger la réponse" : null;
 
   return (
     <div className="flex flex-col h-full border-l border-border/40 bg-card overflow-hidden">
@@ -654,6 +801,7 @@ export default function EmailsPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>("read");
   const [panelSummary, setPanelSummary] = useState<string | null>(null);
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
+  const [panelComposerText, setPanelComposerText] = useState<string>("");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -661,7 +809,8 @@ export default function EmailsPage() {
     setSelectedEmail(email);
     setPanelMode(mode);
     if (mode !== "summary") setPanelSummary(null);
-    if (mode !== "reply") setPanelReplyVariants(null);
+    if (mode !== "reply" && mode !== "compose") setPanelReplyVariants(null);
+    if (mode !== "compose") setPanelComposerText("");
   }
 
   function closePanel() {
@@ -669,6 +818,7 @@ export default function EmailsPage() {
     setPanelMode("read");
     setPanelSummary(null);
     setPanelReplyVariants(null);
+    setPanelComposerText("");
   }
 
   const { isIrisActive, setIsIrisActive, setEmailCount } = useAuth();
@@ -811,6 +961,7 @@ export default function EmailsPage() {
     setPanelMode("read");
     setPanelSummary(null);
     setPanelReplyVariants(null);
+    setPanelComposerText("");
     setReadIds((prev) => new Set(prev).add(email.message_id));
   }, []);
 
@@ -999,6 +1150,9 @@ export default function EmailsPage() {
               mode={panelMode}
               summary={panelSummary}
               replyVariants={panelReplyVariants}
+              composerText={panelComposerText}
+              onSelectVariant={(text) => { setPanelComposerText(text); }}
+              onModeChange={(m) => setPanelMode(m)}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 opacity-20 select-none pointer-events-none">
