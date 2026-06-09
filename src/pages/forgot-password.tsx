@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { IrisLogo } from "@/components/IrisLogo";
 import { apiFetch } from "@/lib/api";
 import { CheckCircle, Mail } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 
 export default function ForgotPasswordPage() {
   const [, navigate] = useLocation();
@@ -104,7 +105,7 @@ export default function ForgotPasswordPage() {
           <IrisLogo className="w-8 h-8" />
           <div>
             <div className="text-xs font-bold text-gray-600">iris</div>
-            <div className="text-[9px] text-gray-400">Beta v0.1.0</div>
+            <div className="text-[9px] text-gray-400">{APP_VERSION}</div>
           </div>
         </div>
       </div>

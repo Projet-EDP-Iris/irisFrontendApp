@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
+import { playDotsClick } from "@/lib/sounds";
 import {
-  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen,
+  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag,
   X, ArrowLeft, FileText, MessageSquare,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -13,9 +15,23 @@ import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
 
-// ---------------------------------------------------------------------------
+// Promo code extractor
+
+function extractPromoCode(body: string): string | null {
+  const promoKeywords = /\b(code|promo|coupon|remise|réduction|reduction|offre|discount)\b/i;
+  const lines = body.split(/\n|\r/);
+  for (const line of lines) {
+    if (promoKeywords.test(line)) {
+      const match = line.match(/\b([A-Z0-9]{4,16})\b/);
+      if (match) return match[1];
+    }
+  }
+  // Fallback: look for CODE: pattern anywhere
+  const fallback = body.match(/CODE[:\s]+([A-Z0-9]{4,16})/i);
+  return fallback ? fallback[1].toUpperCase() : null;
+}
+
 // OAuth callback helpers
-// ---------------------------------------------------------------------------
 
 function getOAuthCallbackParams() {
   const hash = window.location.hash || "";
@@ -36,9 +52,7 @@ function clearCallbackParams() {
   window.history.replaceState({}, "", `${window.location.pathname}${cleanHash}`);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function buildCalendarUrl(email: EmailItem): string {
   let start: Date;
@@ -69,16 +83,12 @@ function cardClass(provider?: string) {
   return "email-card-default";
 }
 
-// ---------------------------------------------------------------------------
 // Shared types
-// ---------------------------------------------------------------------------
 
 type ReplyVariant = { label: string; content: string };
 type PanelMode = "read" | "summary" | "reply";
 
-// ---------------------------------------------------------------------------
 // Reply variants display (used inside EmailPanel in reply mode)
-// ---------------------------------------------------------------------------
 
 function ReplyVariantsView({ variants }: { variants: ReplyVariant[] }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -120,9 +130,7 @@ function ReplyVariantsView({ variants }: { variants: ReplyVariant[] }) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Email Detail Side Panel
-// ---------------------------------------------------------------------------
 
 function EmailPanel({
   email,
@@ -271,14 +279,13 @@ function EmailPanel({
   );
 }
 
-// ---------------------------------------------------------------------------
 // EmailCard (list item)
-// ---------------------------------------------------------------------------
 
 function EmailCard({
   email,
   isIrisActive,
   isSelected,
+  isRead,
   onSelect,
   onSummarize,
   onGenerateReply,
@@ -286,6 +293,7 @@ function EmailCard({
   email: EmailItem;
   isIrisActive: boolean;
   isSelected: boolean;
+  isRead: boolean;
   onSelect: () => void;
   onSummarize?: (summary: string) => void;
   onGenerateReply?: (variants: ReplyVariant[]) => void;
@@ -298,14 +306,19 @@ function EmailCard({
 
   return (
     <div
-      className={`rounded-2xl cursor-pointer transition-all duration-150 ${cardClass(email.provider)} ${
+      className={`rounded-2xl cursor-pointer transition-all duration-200 relative ${cardClass(email.provider)} ${
         isSelected ? "ring-1 ring-primary/40 bg-primary/5" : ""
-      }`}
+      } ${isRead && !isSelected ? "opacity-50 grayscale-[0.25]" : ""}`}
       onClick={onSelect}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onSelect()}
     >
+      {isRead && (
+        <span className="absolute top-2 right-2 text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide pointer-events-none">
+          Lu
+        </span>
+      )}
       <div className="flex items-start gap-3 px-4 pt-3.5 pb-2.5">
         {/* Icon */}
         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${accentColor}18` }}>
@@ -326,8 +339,8 @@ function EmailCard({
           )}
         </div>
 
-        {/* Category pill */}
-        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground flex-shrink-0 mt-0.5">
+        {/* Category pill — leave space for "Lu" badge */}
+        <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground flex-shrink-0 mt-0.5 ${isRead ? "mr-6" : ""}`}>
           {category === "rdv" ? "RDV" : category === "bonsplans" ? "deal" : category}
         </span>
       </div>
@@ -563,16 +576,31 @@ function QuickAction({
         {replyBtn}
       </div>
     );
-    if (category === "bonsplans") return (
-      <div className="flex items-center gap-1.5">
-        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Tag size={11}/><span>Voir</span></button>
-        {summarizeBtn}
-      </div>
-    );
-    // info and everything else
+    if (category === "bonsplans") {
+      const promoCode = extractPromoCode(email.body ?? "");
+      return (
+        <div className="flex items-center gap-1.5">
+          {promoCode && (
+            done ? (
+              <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+                <CheckCircle2 size={13} /><span>Copié ✓</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { navigator.clipboard.writeText(promoCode).catch(() => {}); setDone(true); }}
+                className="flex items-center gap-1.5 text-xs font-semibold border border-primary/40 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 active:scale-[0.98] transition-all whitespace-nowrap"
+              >
+                <Tag size={11}/><span>{promoCode}</span>
+              </button>
+            )
+          )}
+          {summarizeBtn}
+        </div>
+      );
+    }
+    // info and everything else — no "Lu" button, just summarize
     return (
       <div className="flex items-center gap-1.5">
-        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-muted/30 text-muted-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><BookOpen size={11}/><span>Lu</span></button>
         {summarizeBtn}
       </div>
     );
@@ -582,7 +610,8 @@ function QuickAction({
     <div className="flex items-center gap-2">
       {/* Three orange vertical dots — always visible trigger */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        data-tour="quick-action"
+        onClick={() => { playDotsClick(); setOpen((o) => !o); }}
         className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
         style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
         title="Actions"
@@ -605,9 +634,7 @@ function QuickAction({
   );
 }
 
-// ---------------------------------------------------------------------------
 // Main page
-// ---------------------------------------------------------------------------
 
 const TABS = [
   { id: "rdv",       label: "RDV" },
@@ -627,6 +654,7 @@ export default function EmailsPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>("read");
   const [panelSummary, setPanelSummary] = useState<string | null>(null);
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
@@ -643,7 +671,7 @@ export default function EmailsPage() {
     setPanelReplyVariants(null);
   }
 
-  const { isIrisActive, setEmailCount } = useAuth();
+  const { isIrisActive, setIsIrisActive, setEmailCount } = useAuth();
 
   const { connected: gmailConnected, enabled: gmailEnabled, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
   const { connected: outlookConnected, isLoading: outlookStatusLoading, refetchStatus: refetchOutlook } = useOutlookConnection();
@@ -731,7 +759,6 @@ export default function EmailsPage() {
   const gmailStatusErrorStatus = (gmailStatusError as Error & { status?: number } | null)?.status;
   const isSessionExpired = gmailStatusErrorStatus === 401 || gmailStatusErrorStatus === 403;
   const noProviderConnected = !gmailStatusLoading && !outlookStatusLoading && !gmailConnected && !outlookConnected && !isSessionExpired && emailErrorStatus !== 200;
-  const pendingCount = tabCounts["rdv"];
 
   async function handleConnectGmail() {
     setConnectingGmail(true);
@@ -784,12 +811,11 @@ export default function EmailsPage() {
     setPanelMode("read");
     setPanelSummary(null);
     setPanelReplyVariants(null);
+    setReadIds((prev) => new Set(prev).add(email.message_id));
   }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-
-      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 pt-6 pb-3 flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-foreground">Emails</h1>
@@ -804,55 +830,58 @@ export default function EmailsPage() {
           </p>
         </div>
 
-        {isIrisActive ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card">
-            <span className="text-xs text-primary">✦</span>
-            <span className="text-xs text-muted-foreground">Iris analyse…</span>
-            <div className="w-3 h-3 border-[1.5px] border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-muted/30">
-            <span className="text-xs text-muted-foreground opacity-40">✦</span>
-            <span className="text-xs text-muted-foreground italic">Iris est en sommeil</span>
-          </div>
-        )}
+        <motion.button
+          data-tour="iris-toggle"
+          onClick={() => setIsIrisActive(!isIrisActive)}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          animate={{
+            boxShadow: isIrisActive
+              ? "0 0 18px rgba(249,115,22,0.8), inset 0 0 6px rgba(255,255,255,0.2)"
+              : "0 0 8px rgba(184,76,40,0.3)",
+          }}
+          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+          style={{
+            background: isIrisActive
+              ? "radial-gradient(circle, #f97316 0%, #ea580c 100%)"
+              : "linear-gradient(135deg, #b84c28 0%, #8a3518 100%)",
+          }}
+          title={isIrisActive ? "Iris est active" : "Iris est en sommeil"}
+        >
+          <motion.div
+            animate={{ rotate: isIrisActive ? 360 : 0, scale: isIrisActive ? 1.15 : 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-5 h-5">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" strokeLinecap="round" />
+              <line x1="12" y1="2" x2="12" y2="12" strokeLinecap="round" />
+            </svg>
+          </motion.div>
+        </motion.button>
       </div>
-
-      {/* ── Banners ─────────────────────────────────────────────────────── */}
       {statusMsg && (
         <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
           <span>{statusMsg.text}</span>
           <button onClick={() => setStatusMsg(null)} className="opacity-60 hover:opacity-100 transition-opacity ml-2"><X size={13}/></button>
         </div>
       )}
-      {anyConnected && pendingCount > 0 && (
-        <div className="mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
-          <Calendar size={13}/>
-          <span>{pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer</span>
-          <span className="ml-auto px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">{pendingCount}</span>
-        </div>
-      )}
-
-      {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+      <div data-tour="email-tabs" className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "hsl(var(--border))" }}>
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium cursor-pointer transition-all border-b-2 -mb-px whitespace-nowrap"
-            style={{ color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
+            style={{ color: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
           >
             {t.label}
             {tabCounts[t.id] > 0 && (
-              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.12)", color: activeTab === t.id ? "white" : "rgba(255,255,255,0.45)" }}>
+              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.1)", color: activeTab === t.id ? "white" : "hsl(var(--foreground) / 0.5)" }}>
                 {tabCounts[t.id]}
               </span>
             )}
           </button>
         ))}
       </div>
-
-      {/* ── Content (list + panel side-by-side) ─────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* Email list */}
@@ -912,6 +941,7 @@ export default function EmailsPage() {
                 email={email}
                 isIrisActive={isIrisActive}
                 isSelected={selectedEmail?.message_id === email.message_id}
+                isRead={readIds.has(email.message_id)}
                 onSelect={() => handleSelectEmail(email)}
                 onSummarize={(summary) => { setPanelSummary(summary); openPanel(email, "summary"); }}
                 onGenerateReply={(variants) => { setPanelReplyVariants(variants); openPanel(email, "reply"); }}
@@ -982,9 +1012,7 @@ export default function EmailsPage() {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Microsoft icon
-// ---------------------------------------------------------------------------
 
 function MicrosoftIcon() {
   return (

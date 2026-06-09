@@ -7,6 +7,8 @@ import {
   ProfileIconId,
 } from "@/constants/profileIcons";
 import { getSignupDraft, patchSignupDraft } from "@/lib/signupDraft";
+import { APP_VERSION } from "@/lib/version";
+import { IrisLogo } from "@/components/IrisLogo";
 
 export default function IrisProfileIcon() {
   const draft = useMemo(() => getSignupDraft(), []);
@@ -71,9 +73,12 @@ export default function IrisProfileIcon() {
             Continue
           </button>
         </div>
-        <div className="mt-auto">
-          <div className="text-xs font-bold text-gray-700">iris</div>
-          <div className="text-[10px] text-gray-400">Beta v0.1.0</div>
+        <div className="mt-auto flex items-center gap-2">
+          <IrisLogo className="w-6 h-6" />
+          <div>
+            <div className="text-xs font-bold text-gray-700">iris</div>
+            <div className="text-[10px] text-gray-400">{APP_VERSION}</div>
+          </div>
         </div>
       </div>
       <div className="w-1/2 flex items-center justify-center bg-gradient-to-br from-orange-300 via-orange-500 to-orange-600">

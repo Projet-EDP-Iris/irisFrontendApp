@@ -1,6 +1,8 @@
-# Iris - AI Email & Calendar App
+# Iris — AI Email & Calendar Desktop App
 
-Iris is an AI-powered desktop app that extracts important appointment emails and adds them to your calendar automatically.
+Iris is an AI-powered Electron desktop app that reads your emails, detects appointments, sorts messages into smart categories, and lets you act on them directly — confirm a meeting, summarize a thread, or copy a promo code in one click.
+
+> **Backend repo:** [irisBackend](https://github.com/Jerobel05/irisBackend) — FastAPI + Python NLP pipeline
 
 ---
 
@@ -13,64 +15,100 @@ Iris is an AI-powered desktop app that extracts important appointment emails and
 
 ### Environment Setup
 
-The app connects to a backend API. You need two env files in the project root before running:
+The app connects to a backend API. Create two env files in the project root:
 
-**`.env.development`** — used automatically by `npm run electron:dev`:
+**`.env.development`** — used by `npm run electron:dev`
 ```
 VITE_API_URL=http://localhost:8000
 ```
 
-**`.env.production`** — used automatically by `npm run electron:build`:
+**`.env.production`** — used by `npm run electron:build`
 ```
 VITE_API_URL=https://irisbackend-ar0m.onrender.com
 ```
 
-A [.env.example](.env.example) file is included in the repo as a reference. Vite handles switching between the two automatically — no manual changes needed.
+A [.env.example](.env.example) reference file is included. Vite switches between them automatically.
 
 ### Install & Run
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/Jerobel05/iris-app
 cd iris-app
-
-# 2. Set up environment files (see Environment Setup above)
-cp .env.example .env.development
-# then edit .env.development with your local backend URL
-
-# 3. Install dependencies
 npm install
 
-# 3a. Run in the browser (web dev mode)
-npm run dev
-# → Opens at http://localhost:5173
+# Web dev mode (browser)
+npm run dev             # → http://localhost:5173
 
-# 3b. Run as a desktop app (Electron)
-npm run electron:dev
-# → Opens a native desktop window
+# Desktop app (Electron)
+npm run electron:dev    # → native window
 ```
 
 ### Build
 
 ```bash
-# Build the web app only
-npm run build
-
-# Build the desktop installer (outputs to /release)
-npm run electron:build
+npm run build           # web only
+npm run electron:build  # desktop installer → /release
 ```
 
-> Building on Mac produces a `.dmg`. Building on Windows produces a `.exe`.
-> For distributing both, use the GitHub Actions release workflow (see below).
+> Mac → `.dmg` · Windows → `.exe` · Linux → `.AppImage`
+> For cross-platform builds use the GitHub Actions release workflow.
+
+### Project Structure
+
+```
+src/
+├── pages/          # Route-level views (home, emails, login, signup/*)
+├── components/     # Shared UI components + Radix/shadcn primitives (components/ui/)
+├── hooks/          # Data-fetching hooks (useEmailFeed, useGmailConnection, …)
+├── lib/            # Utilities: api.ts, sounds.ts, version.ts, signupDraft.ts
+├── context/        # AuthContext — user session + Iris active state
+├── types/          # Shared TypeScript interfaces (EmailItem, …)
+└── constants/      # Static data (profileIcons)
+
+electron/           # Electron main process + preload scripts
+public/             # Static assets (icons, images)
+docs/               # Feature & architecture documentation
+```
+
+### Architecture
+
+| Layer | Technology |
+|---|---|
+| UI framework | React 18 + TypeScript |
+| Styling | Tailwind CSS v4 + shadcn/ui (Radix UI) |
+| Animations | Framer Motion |
+| Data fetching | TanStack React Query |
+| State | AuthContext (user session, Iris toggle) |
+| Desktop shell | Electron — wraps the Vite SPA in a native window |
+| Backend comms | REST via `src/lib/api.ts` (`apiFetch`) |
+
+**Key data flow:**
+`useEmailFeed` (React Query + cursor pagination) → `EmailsPage` → `EmailCard` → `QuickAction` buttons
+
+**Routing:** Wouter hash-based (`#/home`, `#/emails`, `#/login`, …)
+
+**Sound system:** Web Audio API oscillator synthesis in `src/lib/sounds.ts` — no audio files, respects the Sound toggle in Settings.
+
+**Electron / Vite path note:** `vite.config.ts` sets `base: "./"` for `file://` compatibility. All asset paths must be relative (e.g. `./icon.png`, not `/icon.png`).
+
+### Code Style
+
+- **Tailwind for all styling** — inline styles only for dynamic values (e.g. computed `boxShadow`).
+- **No comments on what code does** — only comments for non-obvious WHY (hidden constraint, workaround, invariant).
+- **No unused imports** — TypeScript strict mode is on.
+- **Framer Motion** for any animation beyond simple CSS transitions.
+- **No console.log** in committed code.
 
 ### Troubleshooting
 
-If you get an error about native modules (`@rollup/rollup-darwin-arm64` etc.):
-
+**Native module errors** (`@rollup/rollup-darwin-arm64` etc.):
 ```bash
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules package-lock.json && npm install
 ```
+
+**Blank window in Electron dev:** ensure the Vite dev server (`npm run dev`) is running first.
+
+**OAuth redirect not working locally:** the backend must be running on `http://localhost:8000` and the callback URL must be registered in Google/Microsoft developer consoles.
 
 ---
 
@@ -80,35 +118,29 @@ npm install
 
 | Branch | Purpose | Direct commits |
 |---|---|---|
-| `main` | Production — stable, released code | Blocked |
+| `main` | Production — stable released code | Blocked |
 | `develop` | Integration — ongoing work | Blocked |
-| `feature/*` | New features | Allowed |
+| `feat/*` | New features | Allowed |
+| `fix/*` | Bug fixes | Allowed |
+| `chore/*` | Maintenance | Allowed |
 
 All changes to `main` and `develop` must go through a **pull request**.
 
-#### Recommended workflow
+#### Workflow
 
-1. Branch off `develop`: `git checkout -b feature/your-feature develop`
-2. Make your changes and commit
-3. Open a PR to `develop` — Copilot will review automatically
-4. Once stable, open a PR from `develop` → `main`
+1. Branch off `develop`: `git checkout -b feat/your-feature develop`
+2. Commit and push
+3. Open a PR to `develop`
+4. Once stable, merge `develop` → `main`
 
-#### Workflows
+#### Automated Workflows
 
-| Workflow | Trigger | What it does |
+| Workflow | Trigger | Action |
 |---|---|---|
-| **Auto Tag** | Push to `main` | Automatically increments the version tag (e.g. `v1.0.3`) |
-| **Release** | New version tag (`v*`) | Builds `.dmg` (Mac) and `.exe` (Windows) via GitHub runners, then publishes a GitHub Release with both installers attached |
-| **Dependabot** | Weekly | Opens PRs to update npm packages and GitHub Actions |
+| **Auto Tag** | Push to `main` | Increments version tag (`v1.0.x`) |
+| **Release** | New version tag | Builds `.dmg` + `.exe` on GitHub runners, publishes GitHub Release |
+| **Dependabot** | Weekly | Opens PRs for npm + Actions updates |
 
-#### Releasing a new version
-
-Merging a PR into `main` triggers everything automatically:
-1. Auto Tag creates a new version tag
-2. Release workflow builds the installers on Mac and Windows runners
-3. A GitHub Release is published with the `.dmg` and `.exe` ready to download
-
----
 ---
 
 ## Français
@@ -120,66 +152,50 @@ Merging a PR into `main` triggers everything automatically:
 
 ### Configuration de l'environnement
 
-L'application se connecte à un backend. Il faut deux fichiers env à la racine du projet avant de démarrer :
+L'application se connecte à un backend. Créez deux fichiers env à la racine :
 
-**`.env.development`** — utilisé automatiquement par `npm run electron:dev` :
+**`.env.development`** — utilisé par `npm run electron:dev`
 ```
 VITE_API_URL=http://localhost:8000
 ```
 
-**`.env.production`** — utilisé automatiquement par `npm run electron:build` :
+**`.env.production`** — utilisé par `npm run electron:build`
 ```
 VITE_API_URL=https://irisbackend-ar0m.onrender.com
 ```
 
-Un fichier [.env.example](.env.example) est inclus dans le dépôt comme référence. Vite gère le basculement automatiquement — aucune modification manuelle nécessaire.
+Un fichier [.env.example](.env.example) de référence est inclus dans le dépôt.
 
 ### Installation & Démarrage
 
 ```bash
-# 1. Cloner le dépôt
 git clone https://github.com/Jerobel05/iris-app
 cd iris-app
-
-# 2. Configurer les fichiers d'environnement (voir section ci-dessus)
-cp .env.example .env.development
-# puis éditer .env.development avec l'URL de votre backend local
-
-# 3. Installer les dépendances
 npm install
 
-# 3a. Lancer dans le navigateur (mode web)
-npm run dev
-# → Disponible sur http://localhost:5173
-
-# 3b. Lancer en application bureau (Electron)
-npm run electron:dev
-# → Ouvre une fenêtre native sur le bureau
+npm run dev             # mode web → http://localhost:5173
+npm run electron:dev    # application bureau
 ```
 
 ### Build
 
 ```bash
-# Compiler l'application web uniquement
-npm run build
-
-# Compiler l'installeur bureau (résultat dans /release)
-npm run electron:build
+npm run build           # web uniquement
+npm run electron:build  # installeur bureau → /release
 ```
 
-> Compiler sur Mac produit un `.dmg`. Sur Windows, un `.exe`.
-> Pour distribuer les deux, utiliser le workflow GitHub Actions (voir ci-dessous).
+### Structure du projet
 
-### Dépannage
-
-En cas d'erreur liée aux modules natifs (`@rollup/rollup-darwin-arm64` etc.) :
-
-```bash
-rm -rf node_modules package-lock.json
-npm install
 ```
-
----
+src/
+├── pages/          # Vues principales (accueil, emails, login, inscription)
+├── components/     # Composants UI partagés + primitives shadcn/ui
+├── hooks/          # Hooks de données (useEmailFeed, useGmailConnection, …)
+├── lib/            # Utilitaires : api, sons, version, brouillon inscription
+├── context/        # AuthContext — session utilisateur + état Iris
+├── types/          # Interfaces TypeScript partagées
+└── constants/      # Données statiques (icônes de profil)
+```
 
 ### Règles du dépôt
 
@@ -189,28 +205,13 @@ npm install
 |---|---|---|
 | `main` | Production — code stable et publié | Bloqués |
 | `develop` | Intégration — travail en cours | Bloqués |
-| `feature/*` | Nouvelles fonctionnalités | Autorisés |
-
-Toute modification sur `main` et `develop` doit passer par une **pull request**.
-
-#### Workflow recommandé
-
-1. Créer une branche depuis `develop` : `git checkout -b feature/ma-fonctionnalite develop`
-2. Faire ses modifications et commiter
-3. Ouvrir une PR vers `develop` — Copilot effectue une revue automatiquement
-4. Une fois stable, ouvrir une PR de `develop` → `main`
+| `feat/*` | Nouvelles fonctionnalités | Autorisés |
+| `fix/*` | Corrections | Autorisés |
 
 #### Workflows automatiques
 
 | Workflow | Déclencheur | Action |
 |---|---|---|
-| **Auto Tag** | Push sur `main` | Incrémente automatiquement le tag de version (ex. `v1.0.3`) |
-| **Release** | Nouveau tag de version (`v*`) | Compile le `.dmg` (Mac) et le `.exe` (Windows) via les runners GitHub, puis publie une GitHub Release avec les deux installeurs |
-| **Dependabot** | Hebdomadaire | Ouvre des PRs pour mettre à jour les packages npm et les GitHub Actions |
-
-#### Publier une nouvelle version
-
-Merger une PR dans `main` déclenche tout automatiquement :
-1. Auto Tag crée un nouveau tag de version
-2. Le workflow Release compile les installeurs sur des runners Mac et Windows
-3. Une GitHub Release est publiée avec le `.dmg` et le `.exe` prêts à télécharger
+| **Auto Tag** | Push sur `main` | Incrémente le tag de version |
+| **Release** | Nouveau tag | Compile `.dmg` + `.exe`, publie une GitHub Release |
+| **Dependabot** | Hebdomadaire | PRs de mise à jour npm et Actions |

@@ -3,3 +3,23 @@ dist
 release
 .env
 .env.local
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Electron builder artifacts
+builder-debug.yml
+builder-effective-config.yaml
+*.blockmap
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/

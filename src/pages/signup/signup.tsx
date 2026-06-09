@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { getSignupDraft, patchSignupDraft } from "@/lib/signupDraft";
 import { IrisLogo } from "@/components/IrisLogo";
 import { ChevronDown } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 
 const TERMS_TEXT = `CONDITIONS GÉNÉRALES D'UTILISATION – IRIS
 Version 1.0 — Juin 2026
@@ -141,7 +142,7 @@ export default function IrisSignup() {
           <IrisLogo className="w-5 h-6" />
           <div className="flex flex-col leading-none">
             <span className="text-xs font-bold text-gray-800">iris</span>
-            <span className="text-xs text-gray-400 mt-0.5">Beta v0.1.0</span>
+            <span className="text-xs text-gray-400 mt-0.5">{APP_VERSION}</span>
           </div>
         </div>
       </div>

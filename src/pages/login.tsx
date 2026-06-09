@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "wouter";
 import { IrisLogo } from "@/components/IrisLogo";
+import { APP_VERSION } from "@/lib/version";
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -109,7 +110,7 @@ export default function LoginPage() {
           <IrisLogo className="w-8 h-8" />
           <div>
             <div className="text-xs font-bold text-gray-600">iris</div>
-            <div className="text-[9px] text-gray-400">Beta v0.1.0</div>
+            <div className="text-[9px] text-gray-400">{APP_VERSION}</div>
           </div>
         </div>
       </div>

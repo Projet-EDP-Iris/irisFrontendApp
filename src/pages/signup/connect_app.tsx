@@ -5,6 +5,8 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { getSignupDraft } from "@/lib/signupDraft";
 import emailOverloadVisual from "@/assets/email-overload-visual.svg";
+import { APP_VERSION } from "@/lib/version";
+import { IrisLogo } from "@/components/IrisLogo";
 
 function validatePasswordPolicy(password: string): string | null {
   if (password.length < 8) return "Le mot de passe doit contenir au moins 8 caracteres.";
@@ -166,9 +168,12 @@ export default function IrisConnectApps() {
         </div>
         {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
 
-        <div className="mt-4">
-          <div className="text-xs font-bold text-gray-700">iris</div>
-          <div className="text-[10px] text-gray-400">Beta v0.1.0</div>
+        <div className="mt-4 flex items-center gap-2">
+          <IrisLogo className="w-6 h-6" />
+          <div>
+            <div className="text-xs font-bold text-gray-700">iris</div>
+            <div className="text-[10px] text-gray-400">{APP_VERSION}</div>
+          </div>
         </div>
       </div>
 

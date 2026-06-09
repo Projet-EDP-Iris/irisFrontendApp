@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { getSignupDraft, patchSignupDraft } from "@/lib/signupDraft";
+import { APP_VERSION } from "@/lib/version";
+import { IrisLogo } from "@/components/IrisLogo";
 
 export default function IrisSignupName() {
   const draft = useMemo(() => getSignupDraft(), []);
@@ -46,9 +48,12 @@ export default function IrisSignupName() {
             Continuer
           </button>
         </div>
-        <div className="absolute bottom-6 left-8">
-          <div className="text-xs font-bold text-gray-600">iris</div>
-          <div className="text-[10px] text-gray-400">Beta v0.1.0</div>
+        <div className="absolute bottom-6 left-8 flex items-center gap-2">
+          <IrisLogo className="w-6 h-6" />
+          <div>
+            <div className="text-xs font-bold text-gray-600">iris</div>
+            <div className="text-[10px] text-gray-400">{APP_VERSION}</div>
+          </div>
         </div>
       </div>
       <div className="w-1/2 flex items-center justify-center bg-gradient-to-br from-orange-300 via-orange-500 to-orange-600">

@@ -1,4 +1,4 @@
-import { X, Mail, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Mail, Calendar, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getProfileIconById, PROFILE_ICON_OPTIONS } from "@/constants/profileIcons";
@@ -15,6 +15,7 @@ import { apiFetch } from "@/lib/api";
 
 interface SettingsPanelProps {
   onClose: () => void;
+  onOpenHelp?: () => void;
 }
 
 function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onClick: () => void; disabled?: boolean }) {
@@ -31,7 +32,7 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
   );
 }
 
-export function SettingsPanel({ onClose }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
   const { connected: gmailConnected, gmailEmail, disconnecting: gmailDisconnecting, disconnect: disconnectGmail } = useGmailConnection();
   const { connected: appleConnected, appleEmail, disconnecting: appleDisconnecting, disconnect: disconnectApple } = useAppleCalendarConnection();
@@ -369,6 +370,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <Toggle enabled={soundAlerts} onClick={handleSoundAlertsToggle} />
                 </div>
               </div>
+            </div>
+
+            {/* Help */}
+            <div className="pt-2 border-t border-border/40">
+              <button
+                onClick={onOpenHelp}
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <HelpCircle size={16} className="text-primary/70 shrink-0" />
+                <div className="text-left">
+                  <div className="text-sm text-foreground">Aide &amp; Tutoriel</div>
+                  <div className="text-[11px] text-muted-foreground">Découvrez comment utiliser Iris</div>
+                </div>
+              </button>
             </div>
           </div>
         </div>

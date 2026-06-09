@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { IrisLogo } from "@/components/IrisLogo";
 import { apiFetch } from "@/lib/api";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { APP_VERSION } from "@/lib/version";
 
 function getHashParam(name: string): string | null {
   const hash = window.location.hash;
@@ -131,7 +132,7 @@ export default function EmailVerificationPage() {
         <IrisLogo className="w-7 h-7" />
         <div>
           <div className="text-xs font-bold text-foreground/60">iris</div>
-          <div className="text-[9px] text-muted-foreground">Beta v0.1.0</div>
+          <div className="text-[9px] text-muted-foreground">{APP_VERSION}</div>
         </div>
       </div>
     </div>
