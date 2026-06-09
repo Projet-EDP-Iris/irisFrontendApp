@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { X, Calendar, ArrowLeft, AlertCircle } from "lucide-react";
 import { useAppleCalendarConnection } from "@/hooks/useAppleCalendarConnection";
 
@@ -6,12 +7,28 @@ interface AppleCalendarConnectModalProps {
   onClose: () => void;
 }
 
-const STEPS = [
-  { n: 1, text: "Enable 2-Factor Authentication on your Apple ID (required for App Passwords)" },
-  { n: 2, text: "Go to appleid.apple.com → Sign In → Security → App-Specific Passwords" },
-  { n: 3, text: 'Click the + button, name it (e.g. "Iris Calendar"), then click Create' },
-  { n: 4, text: "Apple shows a one-time password in the format xxxx-xxxx-xxxx-xxxx" },
-  { n: 5, text: "Copy it immediately — Apple will not show it again" },
+const STEPS: { n: number; content: ReactNode }[] = [
+  { n: 1, content: "Enable 2-Factor Authentication on your Apple ID (required for App Passwords)" },
+  {
+    n: 2,
+    content: (
+      <>
+        Go to{" "}
+        <a
+          href="https://account.apple.com/account/manage"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2 hover:opacity-80 transition-opacity"
+        >
+          account.apple.com/account/manage
+        </a>
+        {" "}→ Sign In → Security → App-Specific Passwords
+      </>
+    ),
+  },
+  { n: 3, content: 'Click the + button, name it (e.g. "Iris Calendar"), then click Create' },
+  { n: 4, content: "Apple shows a one-time password in the format xxxx-xxxx-xxxx-xxxx" },
+  { n: 5, content: "Copy it immediately — Apple will not show it again" },
 ];
 
 export function AppleCalendarConnectModal({ onClose }: AppleCalendarConnectModalProps) {
@@ -59,12 +76,12 @@ export function AppleCalendarConnectModal({ onClose }: AppleCalendarConnectModal
             </p>
 
             <div className="space-y-3 mb-6">
-              {STEPS.map(({ n, text }) => (
+              {STEPS.map(({ n, content }) => (
                 <div key={n} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-[10px] font-semibold text-primary">{n}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{content}</p>
                 </div>
               ))}
             </div>

@@ -18,6 +18,7 @@ interface User {
   profile_icon?: string | null;
   role: string;
   has_subscription: boolean;
+  calendar_providers: string[];
 }
 
 interface AuthContextValue {

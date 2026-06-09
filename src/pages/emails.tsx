@@ -80,11 +80,13 @@ function EmailPanel({
   email: EmailItem;
   onClose: () => void;
 }) {
+  const { user } = useAuth();
   const [body, setBody] = useState<string | null>(null);
   const [bodyLoading, setBodyLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
   const [confirmedSubject, setConfirmedSubject] = useState<string | null>(null);
   const [confirmedProvider, setConfirmedProvider] = useState<string | null>(null);
@@ -106,14 +108,14 @@ function EmailPanel({
     }
   }, [email.message_id, email.provider, email.body]);
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (providers?: string[]) => {
     if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
     setLoading(true);
     try {
       const result = await apiFetch<any>(`/calendar/confirm/${email.db_id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+        body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
       });
       if (result?.slot?.start_time) {
         const d = new Date(result.slot.start_time);
@@ -156,10 +158,48 @@ function EmailPanel({
           </div>
         );
       }
+
+      const connectedProviders = user?.calendar_providers ?? [];
+      const multiProvider = connectedProviders.length > 1 && !!email.db_id;
+
+      if (showPicker) {
+        return (
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => handleConfirm()}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all"
+              style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+            >
+              {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={15}/>}
+              <span>{loading ? "Ajout…" : "Ajouter aux deux calendriers"}</span>
+            </button>
+            <div className="flex gap-2">
+              {connectedProviders.filter(p => p in PROVIDER_META).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => handleConfirm([p])}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all"
+                >
+                  <span>{PROVIDER_META[p].icon}</span>
+                  <span>{PROVIDER_META[p].label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
       return (
-        <button onClick={handleConfirm} disabled={loading} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
+        <button
+          onClick={multiProvider ? () => setShowPicker(true) : () => handleConfirm()}
+          disabled={loading}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all"
+          style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+        >
           {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={15}/>}
-          <span>{loading ? "Ajout…" : "Confirmer ce RDV dans Google Calendar"}</span>
+          <span>{loading ? "Ajout…" : "Confirmer ce RDV"}</span>
         </button>
       );
     }
@@ -296,50 +336,137 @@ function EmailCard({
   );
 }
 
+const PROVIDER_META: Record<string, { label: string; icon: string; color: string }> = {
+  google:  { label: "Google",  icon: "🔵", color: "#4285F4" },
+  apple:   { label: "Apple",   icon: "🍎", color: "#555" },
+  outlook: { label: "Outlook", icon: "🟦", color: "#0078D4" },
+};
+
 function QuickAction({ email, category }: { email: EmailItem; category: string }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
-  if (confirmed || done) {
-    return (
-      <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold">
-        <CheckCircle2 size={13} /><span>Fait ✓</span>
-      </div>
-    );
-  }
+  // Keep action visible once completed
+  useEffect(() => {
+    if (done || confirmed) setOpen(true);
+  }, [done, confirmed]);
 
-  if (category === "rdv") {
-    if (calError) {
+  function renderContent() {
+    if (confirmed || done) {
       return (
-        <button onClick={() => setCalError(false)} className="flex items-center gap-1.5 text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 transition-all" title="Réessayer">
-          <X size={12}/><span>Erreur calendrier</span>
+        <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+          <CheckCircle2 size={13} /><span>Fait ✓</span>
+        </div>
+      );
+    }
+
+    if (category === "rdv") {
+      if (calError) {
+        return (
+          <button
+            onClick={() => setCalError(false)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 transition-all whitespace-nowrap"
+          >
+            <X size={12}/><span>Erreur — Réessayer</span>
+          </button>
+        );
+      }
+
+      const connectedProviders = user?.calendar_providers ?? [];
+      const multiProvider = connectedProviders.length > 1 && !!email.db_id;
+
+      const confirmTo = async (providers?: string[]) => {
+        if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
+        setLoading(true);
+        try {
+          await apiFetch(`/calendar/confirm/${email.db_id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
+          });
+          setConfirmed(true);
+        } catch (err) {
+          console.error("Calendar confirm failed:", err);
+          setCalError(true);
+        } finally { setLoading(false); }
+      };
+
+      if (showPicker) {
+        return (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => confirmTo()}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+              style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+            >
+              {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+              <span>{loading ? "…" : "Les deux"}</span>
+            </button>
+            {connectedProviders.filter(p => p in PROVIDER_META).map((p) => (
+              <button
+                key={p}
+                onClick={() => confirmTo([p])}
+                disabled={loading}
+                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+              >
+                <span>{PROVIDER_META[p].icon}</span>
+                <span>{PROVIDER_META[p].label}</span>
+              </button>
+            ))}
+          </div>
+        );
+      }
+
+      return (
+        <button
+          onClick={multiProvider ? () => setShowPicker(true) : () => confirmTo()}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+          style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+        >
+          {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={12}/>}
+          <span>{loading ? "…" : "Confirmer RDV"}</span>
         </button>
       );
     }
-    const handle = async () => {
-      if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
-      setLoading(true);
-      try {
-        await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
-        setConfirmed(true);
-      } catch (err) {
-        console.error("Calendar confirm failed:", err);
-        setCalError(true);
-      } finally { setLoading(false); }
-    };
-    return (
-      <button onClick={handle} disabled={loading} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
-        {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={12}/>}
-        <span>{loading ? "…" : "Confirmer RDV"}</span>
-      </button>
-    );
+
+    if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all whitespace-nowrap" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={12}/><span>Traiter</span></button>;
+    if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Clock size={12}/><span>Rappel</span></button>;
+    if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Tag size={12}/><span>Voir</span></button>;
+    return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-muted/30 text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><BookOpen size={12}/><span>Lu</span></button>;
   }
-  if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={12}/><span>Traiter</span></button>;
-  if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Clock size={12}/><span>Rappel</span></button>;
-  if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Tag size={12}/><span>Voir</span></button>;
-  return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-muted/30 text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><BookOpen size={12}/><span>Lu</span></button>;
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* Three orange vertical dots — always visible trigger */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
+        style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
+        title="Actions"
+      >
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
+      </button>
+
+      {/* Action content — slides in horizontally to the right */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
+      >
+        <div className="flex items-center">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
