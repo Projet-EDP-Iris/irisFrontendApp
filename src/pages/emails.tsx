@@ -1,21 +1,37 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
+import { playDotsClick } from "@/lib/sounds";
 import {
-  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag, BookOpen,
-  X, ArrowLeft,
+  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag,
+  X, ArrowLeft, FileText, MessageSquare,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import type { EmailItem } from "@/types/email";
 
 
-// ---------------------------------------------------------------------------
+// Promo code extractor
+
+function extractPromoCode(body: string): string | null {
+  const promoKeywords = /\b(code|promo|coupon|remise|réduction|reduction|offre|discount)\b/i;
+  const lines = body.split(/\n|\r/);
+  for (const line of lines) {
+    if (promoKeywords.test(line)) {
+      const match = line.match(/\b([A-Z0-9]{4,16})\b/);
+      if (match) return match[1];
+    }
+  }
+  // Fallback: look for CODE: pattern anywhere
+  const fallback = body.match(/CODE[:\s]+([A-Z0-9]{4,16})/i);
+  return fallback ? fallback[1].toUpperCase() : null;
+}
+
 // OAuth callback helpers
-// ---------------------------------------------------------------------------
 
 function getOAuthCallbackParams() {
   const hash = window.location.hash || "";
@@ -36,9 +52,7 @@ function clearCallbackParams() {
   window.history.replaceState({}, "", `${window.location.pathname}${cleanHash}`);
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function buildCalendarUrl(email: EmailItem): string {
   let start: Date;
@@ -69,28 +83,205 @@ function cardClass(provider?: string) {
   return "email-card-default";
 }
 
-// ---------------------------------------------------------------------------
+// Shared types
+
+type ReplyVariant = { label: string; content: string };
+type PanelMode = "read" | "summary" | "reply" | "compose";
+
+// Reply variants display (used inside EmailPanel in reply mode)
+
+function ReplyVariantsView({
+  variants,
+  onSelect,
+}: {
+  variants: ReplyVariant[];
+  onSelect?: (content: string) => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  if (!variants.length) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        Aucune réponse générée.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        Réponses suggérées · IA
+      </p>
+      {variants.map((v) => (
+        <div key={v.label} className="p-3 rounded-xl border border-border/40 bg-muted/20">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-foreground/70">{v.label}</span>
+            <div className="flex items-center gap-2">
+              {onSelect && (
+                <button
+                  onClick={() => onSelect(v.content)}
+                  className="text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                >
+                  Utiliser →
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(v.content);
+                  setCopied(v.label);
+                  setTimeout(() => setCopied(null), 1500);
+                }}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {copied === v.label ? "Copié ✓" : "Copier"}
+              </button>
+            </div>
+          </div>
+          <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+            {v.content}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Reply composer — shown after user selects a variant
+
+function ReplyComposer({
+  email,
+  initialText,
+  onBack,
+  onSent,
+}: {
+  email: EmailItem;
+  initialText: string;
+  onBack: () => void;
+  onSent: () => void;
+}) {
+  const [text, setText] = useState(initialText);
+  const [files, setFiles] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleSend() {
+    if (!email.db_id) { setError("Identifiant email manquant."); return; }
+    setSending(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("reply_text", text);
+      for (const f of files) form.append("attachments", f);
+      const token = localStorage.getItem("iris_token");
+      const resp = await fetch(`${API_BASE_URL}/emails/reply/${email.db_id}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "Erreur lors de l'envoi.");
+      }
+      onSent();
+    } catch (err) {
+      setError((err as Error).message ?? "Erreur lors de l'envoi.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full gap-3 px-5 py-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
+      >
+        <ArrowLeft size={13} /> Retour aux suggestions
+      </button>
+
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        Rédiger la réponse
+      </p>
+
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="flex-1 w-full rounded-xl border border-border/40 bg-muted/20 p-3 text-sm text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/50"
+        placeholder="Votre réponse…"
+      />
+
+      <div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+        >
+          {files.length > 0 ? `${files.length} fichier(s) joint(s)` : "Joindre des fichiers"}
+        </button>
+        {files.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {files.map((f) => (
+              <li key={f.name} className="text-[10px] text-muted-foreground/70 truncate">{f.name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      <button
+        onClick={() => void handleSend()}
+        disabled={sending || !text.trim()}
+        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-50 transition-all"
+        style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+      >
+        {sending ? (
+          <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Envoi…</>
+        ) : (
+          "Envoyer la réponse"
+        )}
+      </button>
+    </div>
+  );
+}
+
 // Email Detail Side Panel
-// ---------------------------------------------------------------------------
 
 function EmailPanel({
   email,
   onClose,
+  mode = "read",
+  summary = null,
+  replyVariants = null,
+  composerText = "",
+  onSelectVariant,
+  onModeChange,
 }: {
   email: EmailItem;
   onClose: () => void;
+  mode?: PanelMode;
+  summary?: string | null;
+  replyVariants?: ReplyVariant[] | null;
+  composerText?: string;
+  onSelectVariant?: (text: string) => void;
+  onModeChange?: (mode: PanelMode) => void;
 }) {
   const [body, setBody] = useState<string | null>(null);
   const [bodyLoading, setBodyLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [confirmedDate, setConfirmedDate] = useState<string | null>(null);
-  const [confirmedSubject, setConfirmedSubject] = useState<string | null>(null);
-  const [confirmedProvider, setConfirmedProvider] = useState<string | null>(null);
+  const [showingOriginal, setShowingOriginal] = useState(false);
 
   const category = email.category ?? "info";
   const dateStr = fmtDate(email.date, true);
+
+  // Reset "show original" toggle whenever the mode or email changes
+  useEffect(() => { setShowingOriginal(false); }, [mode, email.message_id]);
 
   // For Gmail: fetch full body on open. Outlook already has full body.
   useEffect(() => {
@@ -106,69 +297,90 @@ function EmailPanel({
     }
   }, [email.message_id, email.provider, email.body]);
 
-  const handleConfirm = async () => {
-    if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
-    setLoading(true);
-    try {
-      const result = await apiFetch<any>(`/calendar/confirm/${email.db_id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-      });
-      if (result?.slot?.start_time) {
-        const d = new Date(result.slot.start_time);
-        setConfirmedDate(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }));
-      }
-      setConfirmedSubject(email.subject ?? null);
-      const successProviders: string[] = (result?.providers ?? []).filter((p: any) => !p.error).map((p: any) => p.provider === "google" ? "Google Calendar" : p.provider === "outlook" ? "Outlook Calendar" : p.provider);
-      setConfirmedProvider(successProviders.length > 0 ? successProviders.join(" + ") : null);
-      const failedProviders = result?.providers?.filter((p: any) => p.error);
-      if (failedProviders?.length) {
-        console.warn("Some calendar providers failed:", failedProviders);
-      }
-      setConfirmed(true);
-    } catch (err) {
-      console.error("Calendar confirm failed:", err);
-      alert("Erreur lors de l'ajout au calendrier. Vérifie que ton calendrier est bien connecté !");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const providerLabel = email.provider === "gmail" ? "Gmail" : email.provider === "outlook" ? "Outlook" : null;
   const accentColor = email.provider === "outlook" ? "#0078D4" : email.provider === "gmail" ? "#4285F4" : "#E8842A";
 
-  function renderAction() {
-    if (category === "rdv") {
-      if (confirmed) {
-        return (
-          <div className="flex flex-col gap-1 w-full px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} />
-              <span>Ajouté à {confirmedProvider ?? "votre calendrier"} ✓</span>
-            </div>
-            {confirmedSubject && (
-              <span className="text-xs font-normal opacity-90 truncate">{confirmedSubject}</span>
-            )}
-            {confirmedDate && (
-              <span className="text-xs font-normal opacity-70">Prévu le {confirmedDate}</span>
-            )}
-          </div>
-        );
-      }
+  // Suppress unused-variable warning — category is kept for future use
+  void category;
+
+  function renderBody() {
+    if (bodyLoading) {
       return (
-        <button onClick={handleConfirm} disabled={loading} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
-          {loading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={15}/>}
-          <span>{loading ? "Ajout…" : "Confirmer ce RDV dans Google Calendar"}</span>
-        </button>
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+          Chargement du contenu…
+        </div>
       );
     }
-    if (done) return <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-sm font-semibold"><CheckCircle2 size={16}/><span>Fait ✓</span></div>;
-    if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-[0.98] transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={15}/><span>Marquer comme traité</span></button>;
-    if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] transition-all"><Clock size={15}/><span>Envoyer un rappel</span></button>;
-    if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] transition-all"><Tag size={15}/><span>Voir l'offre</span></button>;
-    return <button onClick={() => setDone(true)} className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-sm font-semibold border border-border bg-muted/30 text-muted-foreground hover:bg-accent active:scale-[0.98] transition-all"><BookOpen size={15}/><span>Marquer comme lu</span></button>;
+
+    if (mode === "summary") {
+      return (
+        <div className="flex flex-col gap-3">
+          {/* Summary card */}
+          <div className="p-3 rounded-xl bg-muted/30 border border-border/40">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Résumé · IA
+            </p>
+            <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap">
+              {summary || "Résumé indisponible."}
+            </p>
+          </div>
+
+          {/* Hover-reveal toggle for original */}
+          <div className="group">
+            <button
+              onClick={() => setShowingOriginal((v) => !v)}
+              className="text-xs text-muted-foreground/50 hover:text-muted-foreground underline underline-offset-2 transition-colors"
+            >
+              {showingOriginal ? "Masquer l'original" : "Voir l'original"}
+            </button>
+            {showingOriginal && (
+              <div className="mt-2 p-3 rounded-xl bg-muted/10 border border-border/20">
+                <p className="text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap break-words">
+                  {body || email.body || "Aucun contenu."}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (mode === "reply") {
+      return (
+        <ReplyVariantsView
+          variants={replyVariants ?? []}
+          onSelect={(content) => {
+            onSelectVariant?.(content);
+            onModeChange?.("compose");
+          }}
+        />
+      );
+    }
+
+    if (mode === "compose") {
+      return (
+        <ReplyComposer
+          email={email}
+          initialText={composerText}
+          onBack={() => onModeChange?.("reply")}
+          onSent={() => { onModeChange?.("read"); }}
+        />
+      );
+    }
+
+    // Default: read mode
+    return body ? (
+      <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
+        {body}
+      </p>
+    ) : (
+      <p className="text-sm text-muted-foreground italic">Aucun contenu.</p>
+    );
   }
+
+  // Mode label shown in the panel header
+  const modeLabel = mode === "summary" ? "Résumé" : mode === "reply" ? "Réponses suggérées" : mode === "compose" ? "Rédiger la réponse" : null;
 
   return (
     <div className="flex flex-col h-full border-l border-border/40 bg-card overflow-hidden">
@@ -179,6 +391,9 @@ function EmailPanel({
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-xs text-muted-foreground truncate">{email.sender || "Expéditeur inconnu"}</p>
+          {modeLabel && (
+            <p className="text-[10px] text-primary/70 font-medium">✦ {modeLabel}</p>
+          )}
         </div>
         {providerLabel && (
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: `${accentColor}18`, color: accentColor }}>
@@ -203,44 +418,32 @@ function EmailPanel({
         {dateStr && <p className="text-xs text-muted-foreground/70 ml-10">{dateStr}</p>}
       </div>
 
-      {/* Body */}
+      {/* Body / mode content */}
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        {bodyLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
-            Chargement du contenu…
-          </div>
-        ) : body ? (
-          <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
-            {body}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground italic">Aucun contenu.</p>
-        )}
-      </div>
-
-      {/* Action */}
-      <div className="px-5 pb-5 pt-3 border-t border-border/30 flex-shrink-0">
-        {renderAction()}
+        {renderBody()}
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
 // EmailCard (list item)
-// ---------------------------------------------------------------------------
 
 function EmailCard({
   email,
   isIrisActive,
   isSelected,
+  isRead,
   onSelect,
+  onSummarize,
+  onGenerateReply,
 }: {
   email: EmailItem;
   isIrisActive: boolean;
   isSelected: boolean;
+  isRead: boolean;
   onSelect: () => void;
+  onSummarize?: (summary: string) => void;
+  onGenerateReply?: (variants: ReplyVariant[]) => void;
 }) {
   const category = email.category ?? "info";
   const subject = email.subject || "(Sans objet)";
@@ -250,14 +453,19 @@ function EmailCard({
 
   return (
     <div
-      className={`rounded-2xl cursor-pointer transition-all duration-150 ${cardClass(email.provider)} ${
+      className={`rounded-2xl cursor-pointer transition-all duration-200 relative ${cardClass(email.provider)} ${
         isSelected ? "ring-1 ring-primary/40 bg-primary/5" : ""
-      }`}
+      } ${isRead && !isSelected ? "opacity-50 grayscale-[0.25]" : ""}`}
       onClick={onSelect}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onSelect()}
     >
+      {isRead && (
+        <span className="absolute top-2 right-2 text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide pointer-events-none">
+          Lu
+        </span>
+      )}
       <div className="flex items-start gap-3 px-4 pt-3.5 pb-2.5">
         {/* Icon */}
         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${accentColor}18` }}>
@@ -278,8 +486,8 @@ function EmailCard({
           )}
         </div>
 
-        {/* Category pill */}
-        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground flex-shrink-0 mt-0.5">
+        {/* Category pill — leave space for "Lu" badge */}
+        <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground flex-shrink-0 mt-0.5 ${isRead ? "mr-6" : ""}`}>
           {category === "rdv" ? "RDV" : category === "bonsplans" ? "deal" : category}
         </span>
       </div>
@@ -290,61 +498,290 @@ function EmailCard({
         style={{ opacity: isIrisActive ? 1 : 0.28, pointerEvents: isIrisActive ? "auto" : "none" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <QuickAction email={email} category={category} />
+        <QuickAction
+          email={email}
+          category={category}
+          onSummarize={onSummarize}
+          onGenerateReply={onGenerateReply}
+        />
       </div>
     </div>
   );
 }
 
-function QuickAction({ email, category }: { email: EmailItem; category: string }) {
+const PROVIDER_META: Record<string, { label: string; icon: string; color: string }> = {
+  google:  { label: "Google",  icon: "🔵", color: "#4285F4" },
+  apple:   { label: "Apple",   icon: "🍎", color: "#555" },
+  outlook: { label: "Outlook", icon: "🟦", color: "#0078D4" },
+};
+
+function QuickAction({
+  email,
+  category,
+  onSummarize,
+  onGenerateReply,
+}: {
+  email: EmailItem;
+  category: string;
+  onSummarize?: (summary: string) => void;
+  onGenerateReply?: (variants: ReplyVariant[]) => void;
+}) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
+  const [replying, setReplying] = useState(false);
 
-  if (confirmed || done) {
+  async function handleSummarize() {
+    if (!onSummarize) return;
+    setSummarizing(true);
+    try {
+      const res = await apiFetch<{ summary: string }>("/emails/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "" }),
+      });
+      onSummarize(res.summary || "Résumé indisponible.");
+    } catch {
+      onSummarize("Erreur lors du résumé.");
+    } finally {
+      setSummarizing(false);
+    }
+  }
+
+  async function handleGenerateReply() {
+    if (!onGenerateReply) return;
+    setReplying(true);
+    try {
+      const res = await apiFetch<{ variants: ReplyVariant[] }>("/suggest-inline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "" }),
+      });
+      onGenerateReply(res.variants ?? []);
+    } catch {
+      onGenerateReply([]);
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  // Keep action visible once completed
+  useEffect(() => {
+    if (done || confirmed) setOpen(true);
+  }, [done, confirmed]);
+
+  function renderContent() {
+    if (confirmed || done) {
+      return (
+        <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+          <CheckCircle2 size={13} /><span>Fait ✓</span>
+        </div>
+      );
+    }
+
+    if (category === "rdv") {
+      if (calError) {
+        return (
+          <button
+            onClick={() => setCalError(false)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 transition-all whitespace-nowrap"
+          >
+            <X size={12}/><span>Erreur — Réessayer</span>
+          </button>
+        );
+      }
+
+      const connectedProviders = user?.calendar_providers ?? [];
+      const multiProvider = connectedProviders.length > 1 && !!email.db_id;
+
+      const confirmTo = async (providers?: string[]) => {
+        if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
+        setLoading(true);
+        try {
+          await apiFetch(`/calendar/confirm/${email.db_id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
+          });
+          setConfirmed(true);
+        } catch (err) {
+          console.error("Calendar confirm failed:", err);
+          setCalError(true);
+        } finally { setLoading(false); }
+      };
+
+      const rdvSummarizeBtn = (
+        <button
+          onClick={() => void handleSummarize()}
+          disabled={summarizing}
+          className="flex items-center gap-1 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+        >
+          {summarizing ? <span className="w-3 h-3 border border-foreground/30 border-t-foreground/80 rounded-full animate-spin" /> : <FileText size={11}/>}
+          <span>Résumer</span>
+        </button>
+      );
+
+      const rdvReplyBtn = (
+        <button
+          onClick={() => void handleGenerateReply()}
+          disabled={replying}
+          className="flex items-center gap-1 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+        >
+          {replying ? <span className="w-3 h-3 border border-foreground/30 border-t-foreground/80 rounded-full animate-spin" /> : <MessageSquare size={11}/>}
+          <span>Répondre</span>
+        </button>
+      );
+
+      if (showPicker) {
+        return (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => confirmTo()}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+              style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+            >
+              {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+              <span>{loading ? "…" : "Les deux"}</span>
+            </button>
+            {connectedProviders.filter(p => p in PROVIDER_META).map((p) => (
+              <button
+                key={p}
+                onClick={() => confirmTo([p])}
+                disabled={loading}
+                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+              >
+                <span>{PROVIDER_META[p].icon}</span>
+                <span>{PROVIDER_META[p].label}</span>
+              </button>
+            ))}
+            {rdvSummarizeBtn}
+            {rdvReplyBtn}
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={multiProvider ? () => setShowPicker(true) : () => confirmTo()}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+            style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+          >
+            {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+            <span>{loading ? "…" : "Confirmer RDV"}</span>
+          </button>
+          {rdvSummarizeBtn}
+          {rdvReplyBtn}
+        </div>
+      );
+    }
+
+    const summarizeBtn = (
+      <button
+        onClick={() => void handleSummarize()}
+        disabled={summarizing}
+        className="flex items-center gap-1 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+      >
+        {summarizing
+          ? <span className="w-3 h-3 border border-foreground/30 border-t-foreground/80 rounded-full animate-spin" />
+          : <FileText size={11}/>}
+        <span>Résumer</span>
+      </button>
+    );
+
+    const replyBtn = (
+      <button
+        onClick={() => void handleGenerateReply()}
+        disabled={replying}
+        className="flex items-center gap-1 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+      >
+        {replying
+          ? <span className="w-3 h-3 border border-foreground/30 border-t-foreground/80 rounded-full animate-spin" />
+          : <MessageSquare size={11}/>}
+        <span>Répondre</span>
+      </button>
+    );
+
+    if (category === "action") return (
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all whitespace-nowrap" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={11}/><span>Traiter</span></button>
+        {summarizeBtn}
+        {replyBtn}
+      </div>
+    );
+    if (category === "attente") return (
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Clock size={11}/><span>Rappel</span></button>
+        {summarizeBtn}
+        {replyBtn}
+      </div>
+    );
+    if (category === "bonsplans") {
+      const promoCode = extractPromoCode(email.body ?? "");
+      return (
+        <div className="flex items-center gap-1.5">
+          {promoCode && (
+            done ? (
+              <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+                <CheckCircle2 size={13} /><span>Copié ✓</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { navigator.clipboard.writeText(promoCode).catch(() => {}); setDone(true); }}
+                className="flex items-center gap-1.5 text-xs font-semibold border border-primary/40 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 active:scale-[0.98] transition-all whitespace-nowrap"
+              >
+                <Tag size={11}/><span>{promoCode}</span>
+              </button>
+            )
+          )}
+          {summarizeBtn}
+        </div>
+      );
+    }
+    // info and everything else — no "Lu" button, just summarize
     return (
-      <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold">
-        <CheckCircle2 size={13} /><span>Fait ✓</span>
+      <div className="flex items-center gap-1.5">
+        {summarizeBtn}
       </div>
     );
   }
 
-  if (category === "rdv") {
-    if (calError) {
-      return (
-        <button onClick={() => setCalError(false)} className="flex items-center gap-1.5 text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg border border-red-500/30 hover:bg-red-500/10 transition-all" title="Réessayer">
-          <X size={12}/><span>Erreur calendrier</span>
-        </button>
-      );
-    }
-    const handle = async () => {
-      if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
-      setLoading(true);
-      try {
-        await apiFetch(`/calendar/confirm/${email.db_id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
-        setConfirmed(true);
-      } catch (err) {
-        console.error("Calendar confirm failed:", err);
-        setCalError(true);
-      } finally { setLoading(false); }
-    };
-    return (
-      <button onClick={handle} disabled={loading} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}>
-        {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={12}/>}
-        <span>{loading ? "…" : "Confirmer RDV"}</span>
+  return (
+    <div className="flex items-center gap-2">
+      {/* Three orange vertical dots — always visible trigger */}
+      <button
+        data-tour="quick-action"
+        onClick={() => { playDotsClick(); setOpen((o) => !o); }}
+        className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
+        style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
+        title="Actions"
+      >
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
+        <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
       </button>
-    );
-  }
-  if (category === "action") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={12}/><span>Traiter</span></button>;
-  if (category === "attente") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Clock size={12}/><span>Rappel</span></button>;
-  if (category === "bonsplans") return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><Tag size={12}/><span>Voir</span></button>;
-  return <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-muted/30 text-muted-foreground px-3 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all"><BookOpen size={12}/><span>Lu</span></button>;
+
+      {/* Action content — slides in horizontally to the right */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
+      >
+        <div className="flex items-center">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-// ---------------------------------------------------------------------------
 // Main page
-// ---------------------------------------------------------------------------
 
 const TABS = [
   { id: "rdv",       label: "RDV" },
@@ -361,9 +798,30 @@ export default function EmailsPage() {
   const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
+  const [panelMode, setPanelMode] = useState<PanelMode>("read");
+  const [panelSummary, setPanelSummary] = useState<string | null>(null);
+  const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
+  const [panelComposerText, setPanelComposerText] = useState<string>("");
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { isIrisActive, setEmailCount } = useAuth();
+  function openPanel(email: EmailItem, mode: PanelMode = "read") {
+    setSelectedEmail(email);
+    setPanelMode(mode);
+    if (mode !== "summary") setPanelSummary(null);
+    if (mode !== "reply" && mode !== "compose") setPanelReplyVariants(null);
+    if (mode !== "compose") setPanelComposerText("");
+  }
+
+  function closePanel() {
+    setSelectedEmail(null);
+    setPanelMode("read");
+    setPanelSummary(null);
+    setPanelReplyVariants(null);
+    setPanelComposerText("");
+  }
+
+  const { isIrisActive, setIsIrisActive, setEmailCount } = useAuth();
 
   const { connected: gmailConnected, enabled: gmailEnabled, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
   const { connected: outlookConnected, isLoading: outlookStatusLoading, refetchStatus: refetchOutlook } = useOutlookConnection();
@@ -451,7 +909,6 @@ export default function EmailsPage() {
   const gmailStatusErrorStatus = (gmailStatusError as Error & { status?: number } | null)?.status;
   const isSessionExpired = gmailStatusErrorStatus === 401 || gmailStatusErrorStatus === 403;
   const noProviderConnected = !gmailStatusLoading && !outlookStatusLoading && !gmailConnected && !outlookConnected && !isSessionExpired && emailErrorStatus !== 200;
-  const pendingCount = tabCounts["rdv"];
 
   async function handleConnectGmail() {
     setConnectingGmail(true);
@@ -501,12 +958,15 @@ export default function EmailsPage() {
 
   const handleSelectEmail = useCallback((email: EmailItem) => {
     setSelectedEmail((prev) => (prev?.message_id === email.message_id ? null : email));
+    setPanelMode("read");
+    setPanelSummary(null);
+    setPanelReplyVariants(null);
+    setPanelComposerText("");
+    setReadIds((prev) => new Set(prev).add(email.message_id));
   }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-
-      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 pt-6 pb-3 flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-foreground">Emails</h1>
@@ -521,55 +981,58 @@ export default function EmailsPage() {
           </p>
         </div>
 
-        {isIrisActive ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card">
-            <span className="text-xs text-primary">✦</span>
-            <span className="text-xs text-muted-foreground">Iris analyse…</span>
-            <div className="w-3 h-3 border-[1.5px] border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-muted/30">
-            <span className="text-xs text-muted-foreground opacity-40">✦</span>
-            <span className="text-xs text-muted-foreground italic">Iris est en sommeil</span>
-          </div>
-        )}
+        <motion.button
+          data-tour="iris-toggle"
+          onClick={() => setIsIrisActive(!isIrisActive)}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          animate={{
+            boxShadow: isIrisActive
+              ? "0 0 18px rgba(249,115,22,0.8), inset 0 0 6px rgba(255,255,255,0.2)"
+              : "0 0 8px rgba(184,76,40,0.3)",
+          }}
+          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+          style={{
+            background: isIrisActive
+              ? "radial-gradient(circle, #f97316 0%, #ea580c 100%)"
+              : "linear-gradient(135deg, #b84c28 0%, #8a3518 100%)",
+          }}
+          title={isIrisActive ? "Iris est active" : "Iris est en sommeil"}
+        >
+          <motion.div
+            animate={{ rotate: isIrisActive ? 360 : 0, scale: isIrisActive ? 1.15 : 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-5 h-5">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" strokeLinecap="round" />
+              <line x1="12" y1="2" x2="12" y2="12" strokeLinecap="round" />
+            </svg>
+          </motion.div>
+        </motion.button>
       </div>
-
-      {/* ── Banners ─────────────────────────────────────────────────────── */}
       {statusMsg && (
         <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
           <span>{statusMsg.text}</span>
           <button onClick={() => setStatusMsg(null)} className="opacity-60 hover:opacity-100 transition-opacity ml-2"><X size={13}/></button>
         </div>
       )}
-      {anyConnected && pendingCount > 0 && (
-        <div className="mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium bg-primary/10 border border-primary/30 text-primary flex items-center gap-2">
-          <Calendar size={13}/>
-          <span>{pendingCount} RDV{pendingCount > 1 ? "s" : ""} à confirmer</span>
-          <span className="ml-auto px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold">{pendingCount}</span>
-        </div>
-      )}
-
-      {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+      <div data-tour="email-tabs" className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "hsl(var(--border))" }}>
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium cursor-pointer transition-all border-b-2 -mb-px whitespace-nowrap"
-            style={{ color: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
+            style={{ color: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
           >
             {t.label}
             {tabCounts[t.id] > 0 && (
-              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "rgba(255,255,255,0.12)", color: activeTab === t.id ? "white" : "rgba(255,255,255,0.45)" }}>
+              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.1)", color: activeTab === t.id ? "white" : "hsl(var(--foreground) / 0.5)" }}>
                 {tabCounts[t.id]}
               </span>
             )}
           </button>
         ))}
       </div>
-
-      {/* ── Content (list + panel side-by-side) ─────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* Email list */}
@@ -629,7 +1092,10 @@ export default function EmailsPage() {
                 email={email}
                 isIrisActive={isIrisActive}
                 isSelected={selectedEmail?.message_id === email.message_id}
+                isRead={readIds.has(email.message_id)}
                 onSelect={() => handleSelectEmail(email)}
+                onSummarize={(summary) => { setPanelSummary(summary); openPanel(email, "summary"); }}
+                onGenerateReply={(variants) => { setPanelReplyVariants(variants); openPanel(email, "reply"); }}
               />
             ))}
 
@@ -678,7 +1144,16 @@ export default function EmailsPage() {
         {/* Email detail side panel — always visible */}
         <div className="flex-1 overflow-hidden border-l border-border/40">
           {selectedEmail ? (
-            <EmailPanel email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+            <EmailPanel
+              email={selectedEmail}
+              onClose={closePanel}
+              mode={panelMode}
+              summary={panelSummary}
+              replyVariants={panelReplyVariants}
+              composerText={panelComposerText}
+              onSelectVariant={(text) => { setPanelComposerText(text); }}
+              onModeChange={(m) => setPanelMode(m)}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 opacity-20 select-none pointer-events-none">
               <img src="./icon.png" alt="" className="w-16 h-16 object-contain" />
@@ -691,9 +1166,7 @@ export default function EmailsPage() {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Microsoft icon
-// ---------------------------------------------------------------------------
 
 function MicrosoftIcon() {
   return (

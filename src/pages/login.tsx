@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "wouter";
 import { IrisLogo } from "@/components/IrisLogo";
+import { APP_VERSION } from "@/lib/version";
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -53,8 +54,12 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-gray-700">
                   Mot de passe
                 </label>
-                <button type="button" className="hidden text-sm text-orange-500 hover:underline">
-                  mot de passe oublié
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-sm text-orange-500 hover:underline"
+                >
+                  Mot de passe oublié ?
                 </button>
               </div>
               <input
@@ -105,7 +110,7 @@ export default function LoginPage() {
           <IrisLogo className="w-8 h-8" />
           <div>
             <div className="text-xs font-bold text-gray-600">iris</div>
-            <div className="text-[9px] text-gray-400">Beta v0.1.0</div>
+            <div className="text-[9px] text-gray-400">{APP_VERSION}</div>
           </div>
         </div>
       </div>

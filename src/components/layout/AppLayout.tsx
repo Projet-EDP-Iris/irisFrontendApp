@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { TourOverlay } from "@/components/TourOverlay";
 import { useAuth } from "@/context/AuthContext";
 import { getProfileIconById } from "@/constants/profileIcons";
-import { isSoundAlertsEnabled } from "@/lib/notificationPreferences";
+import { playPop, playSettingsPanelPop } from "@/lib/sounds";
 
 interface NavItem {
   icon: ReactNode;
@@ -26,53 +27,6 @@ const navItems: NavItem[] = [
   { icon: <Mail size={18} />, label: "E-mails", path: "/emails" },
 ];
 
-function playPop(expanding: boolean) {
-  if (!isSoundAlertsEnabled()) return;
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    const baseFreq = expanding ? 160 : 260;
-    osc.frequency.setValueAtTime(baseFreq * 1.6, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq, ctx.currentTime + 0.09);
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.13);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.13);
-  } catch {
-    // AudioContext may be blocked before user interaction — fail silently
-  }
-}
-
-function playSettingsPanelPop(opening: boolean) {
-  if (!isSoundAlertsEnabled()) return;
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (opening) {
-      // Slightly brighter "pop-in" sound for opening.
-      osc.frequency.setValueAtTime(280, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.08);
-    } else {
-      // Slightly lower "pop-out" sound for closing.
-      osc.frequency.setValueAtTime(360, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.1);
-    }
-
-    gain.gain.setValueAtTime(0.11, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.14);
-  } catch {
-    // AudioContext may be blocked before user interaction — fail silently
-  }
-}
 
 function AnimatedHamburger({ collapsed }: { collapsed: boolean }) {
   return (
@@ -150,6 +104,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { logout, user, emailCount } = useAuth();
   const selectedIcon = getProfileIconById(user?.profile_icon);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleToggle = () => {
@@ -208,11 +163,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     : "text-sidebar-foreground hover:bg-sidebar-accent"
                 }`}
               >
-                <span className="shrink-0">
+                <span className="shrink-0 relative">
                   {item.path === "/emails" ? (
                     <AnimatedEnvelope sidebarOpen={!sidebarCollapsed} />
                   ) : (
                     item.icon
+                  )}
+                  {item.path === "/emails" && sidebarCollapsed && emailCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold tabular-nums leading-none flex items-center justify-center"
+                      style={{
+                        background: isActive ? "rgba(255,255,255,0.3)" : "#E8842A",
+                        color: "white",
+                      }}
+                    >
+                      {emailCount}
+                    </span>
                   )}
                 </span>
                 <AnimatePresence>
@@ -366,8 +332,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
             playSettingsPanelPop(false);
             setSettingsOpen(false);
           }}
+          onOpenHelp={() => {
+            setSettingsOpen(false);
+            setHelpOpen(true);
+          }}
         />
       )}
+
+      {/* Guided tour */}
+      {helpOpen && <TourOverlay onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

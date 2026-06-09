@@ -18,6 +18,7 @@ interface User {
   profile_icon?: string | null;
   role: string;
   has_subscription: boolean;
+  calendar_providers: string[];
 }
 
 interface AuthContextValue {
@@ -29,7 +30,7 @@ interface AuthContextValue {
   emailCount: number;
   setEmailCount: (n: number) => void;
   login: (email: string, password: string) => Promise<void>;
-  signup: (payload: { email: string; password: string; name: string; profile_icon: string }) => Promise<void>;
+  signup: (payload: { email: string; password: string; name: string; profile_icon: string; accepted_terms: boolean }) => Promise<void>;
   updateProfile: (payload: { name?: string; email?: string; profile_icon?: string }) => Promise<void>;
   logout: () => void;
 }
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     navigate("/home");
   };
 
-  const signup = async (payload: { email: string; password: string; name: string; profile_icon: string }) => {
+  const signup = async (payload: { email: string; password: string; name: string; profile_icon: string; accepted_terms: boolean }) => {
     await apiFetch<User>("/users/", {
       method: "POST",
       body: JSON.stringify({
@@ -102,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password: payload.password,
         name: payload.name.trim(),
         profile_icon: payload.profile_icon,
+        accepted_terms: payload.accepted_terms,
       }),
     });
     await login(payload.email, payload.password);

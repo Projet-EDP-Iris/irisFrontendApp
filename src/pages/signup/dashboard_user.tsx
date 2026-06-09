@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IrisLogo } from "@/components/IrisLogo";
+import { APP_VERSION } from "@/lib/version";
 
-// ── Nav icon wrapper ───────────────────────────────────────
 const NavIcon = ({ active = false, children, onClick }: { active?: boolean; children: React.ReactNode; onClick?: () => void }) => (
   <button
     onClick={onClick}
@@ -12,7 +12,6 @@ const NavIcon = ({ active = false, children, onClick }: { active?: boolean; chil
   </button>
 );
 
-// ── SVG Icons ──────────────────────────────────────────────
 const HamburgerIcon  = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6"  x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
 const HomeIcon       = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>;
 const MailIcon       = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>;
@@ -35,8 +34,6 @@ export default function IrisDashboard() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden font-sans select-none" style={{ background: "#2A1F14" }}>
-
-      {/* ── SIDEBAR ───────────────────────────────────────────── */}
       <aside
         className="flex flex-col items-center py-5 gap-3 flex-shrink-0 z-10"
         style={{ width: 64, background: "#362818", borderRight: "1px solid rgba(255,255,255,0.05)" }}
@@ -85,8 +82,6 @@ export default function IrisDashboard() {
           <span style={{ color: "rgba(255,255,255,0.45)" }}><HistoryIcon /></span>
         </NavIcon>
       </aside>
-
-      {/* ── MAIN CONTENT ─────────────────────────────────────── */}
       <main className="relative flex-1 flex items-center justify-center overflow-hidden">
 
         {/* Concentric circles */}
@@ -153,7 +148,7 @@ export default function IrisDashboard() {
           <IrisLogo className="w-[52px] h-[52px]" />
           <div className="flex flex-col leading-none">
             <span className="text-xs font-bold" style={{ color: "#D4621A" }}>iris</span>
-            <span className="text-xs" style={{ color: "#7A4020", fontSize: 9 }}>Beta v0.1.0</span>
+            <span className="text-xs" style={{ color: "#7A4020", fontSize: 9 }}>{APP_VERSION}</span>
           </div>
         </div>
 

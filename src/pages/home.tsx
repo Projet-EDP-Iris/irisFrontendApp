@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 
 import { useAuth } from "@/context/AuthContext";
 import { IrisLogo } from "@/components/IrisLogo";
+import { APP_VERSION } from "@/lib/version";
 
 export default function HomePage() {
   const [, navigate] = useLocation();
@@ -110,6 +111,7 @@ export default function HomePage() {
 
         {/* Power button */}
         <motion.button
+          data-tour="power-button"
           onClick={handleToggle}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -181,7 +183,7 @@ export default function HomePage() {
         <IrisLogo className="w-10 h-10" />
         <div>
           <div className="text-xs font-bold text-primary/70 uppercase tracking-tighter">iris</div>
-          <div className="text-[9px] text-muted-foreground">Beta v0.1.0</div>
+          <div className="text-[9px] text-muted-foreground">{APP_VERSION}</div>
         </div>
       </div>
     </div>
