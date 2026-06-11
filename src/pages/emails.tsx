@@ -888,34 +888,56 @@ export default function EmailsPage() {
     isFetchingNextPage,
   } = useEmailFeed(anyConnected);
 
-  // Fast cached read — shows last-known emails instantly while the feed loads in background
-  const { data: cachedData } = useQuery({
-    queryKey: ["emails-cached"],
-    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>("/emails/cached?limit=50"),
+  // Per-category server-side query — each tab fetches its own emails independently.
+  // The queryKey includes activeTab so React Query re-fetches automatically on tab switch.
+  const { data: categoryData, isLoading: categoryLoading } = useQuery({
+    queryKey: ["emails-by-category", activeTab],
+    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>(
+      `/emails/cached?category=${activeTab}&limit=200`
+    ),
     enabled: anyConnected,
     staleTime: 30_000,
   });
 
+  // Counts query for tab badges — fast DB aggregate, no full email load needed
+  const { data: countsData } = useQuery({
+    queryKey: ["emails-counts"],
+    queryFn: () => apiFetch<{ counts: Record<string, number>; total: number }>("/emails/counts"),
+    enabled: anyConnected,
+    staleTime: 30_000,
+    refetchInterval: 3 * 60 * 1000,
+  });
+
+  // allEmails kept for background sync tracking only (useEmailFeed populates the DB)
   const allEmails =
     feedData?.pages.flatMap((p) => p.emails) ??
-    cachedData?.emails ??
     [];
-  // Don't show the full-page spinner when cached emails are already available
-  const isLoading = feedLoading && !cachedData?.emails?.length;
+
+  // Don't show the full-page spinner when category data is already available
+  const isLoading = (feedLoading || categoryLoading) && !categoryData?.emails?.length;
   const isRefreshing = isFetching && !feedLoading;
 
-  // Compute tab counts over ALL loaded emails
-  const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-  for (const e of allEmails) {
-    const cat = e.category ?? "info";
-    tabCounts[cat in tabCounts ? cat : "info"]++;
-  }
+  // Tab counts from fast DB aggregate endpoint
+  const tabCounts: Record<string, number> = {
+    rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0,
+    ...(countsData?.counts ?? {}),
+  };
 
-  // Filtered list for the active tab
-  const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
+  // Display list: server-filtered — no client-side filter needed
+  const displayEmails = categoryData?.emails ?? [];
 
   // Sync total email count to sidebar badge
-  useEffect(() => { setEmailCount(allEmails.length); }, [allEmails.length, setEmailCount]);
+  useEffect(() => {
+    setEmailCount(countsData?.total ?? allEmails.length);
+  }, [countsData?.total, allEmails.length, setEmailCount]);
+
+  // Invalidate category + counts caches after each background feed sync
+  useEffect(() => {
+    if (!isFetching) {
+      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-counts"] });
+    }
+  }, [isFetching, queryClient]);
 
   // Infinite scroll — when sentinel is visible, load next page
   useEffect(() => {
@@ -1128,15 +1150,15 @@ export default function EmailsPage() {
             {error && !noProviderConnected && emailErrorStatus !== 404 && <div className="text-center py-14 text-red-400 text-sm">Erreur de chargement. Réessayez.</div>}
 
             {/* Empty state for tab */}
-            {anyConnected && !isLoading && allEmails.length > 0 && filteredEmails.length === 0 && (
+            {anyConnected && !isLoading && tabCounts[activeTab] > 0 && displayEmails.length === 0 && (
               <div className="text-center py-10 text-muted-foreground/40 text-sm">Aucun email dans cette catégorie.</div>
             )}
-            {anyConnected && !isLoading && allEmails.length === 0 && !error && (
+            {anyConnected && !isLoading && (countsData?.total ?? 0) === 0 && !error && (
               <div className="text-center py-14 text-muted-foreground text-sm">Aucun email trouvé.</div>
             )}
 
             {/* Email cards */}
-            {filteredEmails.map((email) => (
+            {displayEmails.map((email) => (
               <EmailCard
                 key={email.message_id ?? email.subject}
                 email={email}
@@ -1161,7 +1183,7 @@ export default function EmailsPage() {
             )}
 
             {/* End of list per tab */}
-            {!hasNextPage && !isFetchingNextPage && filteredEmails.length > 0 && (
+            {!categoryData?.has_more && displayEmails.length > 0 && (
               <p className="text-center text-xs text-muted-foreground/30 py-3">
                 — Tous les emails de cette catégorie sont chargés —
               </p>
