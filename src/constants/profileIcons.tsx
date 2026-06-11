@@ -10,7 +10,7 @@ import React from "react";
 
 const img = (n: number) => (
   <img
-    src={`${import.meta.env.BASE_URL}Profile Icon options Iris APP/ProfileIcon${n}.png`}
+    src={`${import.meta.env.BASE_URL}ProfileIcon${n}.png`}
     alt={`Profile icon ${n}`}
     style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
   />

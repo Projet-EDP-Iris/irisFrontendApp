@@ -530,11 +530,13 @@ function QuickAction({
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
+  const lastClickTimeRef = useRef<number>(0);
 
   async function handleSummarize() {
     if (!onSummarize) return;
@@ -576,7 +578,22 @@ function QuickAction({
   }, [done, confirmed]);
 
   function renderContent() {
-    if (confirmed || done) {
+    if (confirmed) {
+      const dateLabel = confirmedSlot
+        ? new Date(confirmedSlot.start_time).toLocaleDateString("fr-FR", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : null;
+      return (
+        <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+          <CheckCircle2 size={13} />
+          <span>RDV ajouté{dateLabel ? ` · ${dateLabel}` : ""}</span>
+        </div>
+      );
+    }
+    if (done) {
       return (
         <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
           <CheckCircle2 size={13} /><span>Fait ✓</span>
@@ -600,14 +617,21 @@ function QuickAction({
       const multiProvider = connectedProviders.length > 1 && !!email.db_id;
 
       const confirmTo = async (providers?: string[]) => {
-        if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
+        if (!email.db_id) {
+          window.open(buildCalendarUrl(email), "_blank");
+          return; // user must manually save in the browser tab
+        }
         setLoading(true);
         try {
-          await apiFetch(`/calendar/confirm/${email.db_id}`, {
+          const res = await apiFetch<{
+            slot: { start_time: string; end_time: string };
+            providers: { provider: string; error: string | null }[];
+          }>(`/calendar/confirm/${email.db_id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
           });
+          setConfirmedSlot(res.slot ?? null);
           setConfirmed(true);
         } catch (err) {
           console.error("Calendar confirm failed:", err);
@@ -669,13 +693,13 @@ function QuickAction({
       return (
         <div className="flex items-center gap-1.5">
           <button
-            onClick={multiProvider ? () => setShowPicker(true) : () => confirmTo()}
+            onClick={multiProvider ? () => setShowPicker(true) : () => void confirmTo()}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
             style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
           >
             {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
-            <span>{loading ? "…" : "Confirmer RDV"}</span>
+            <span>{loading ? "…" : email.db_id ? "Confirmer RDV" : "Ouvrir dans le calendrier →"}</span>
           </button>
           {rdvSummarizeBtn}
           {rdvReplyBtn}
@@ -758,10 +782,22 @@ function QuickAction({
       {/* Three orange vertical dots — always visible trigger */}
       <button
         data-tour="quick-action"
-        onClick={() => { playDotsClick(); setOpen((o) => !o); }}
+        onClick={() => {
+          const now = Date.now();
+          if (now - lastClickTimeRef.current < 300) {
+            // Double-click: go back one step
+            lastClickTimeRef.current = 0;
+            if (showPicker) { setShowPicker(false); }
+            else { setOpen(false); }
+            return;
+          }
+          lastClickTimeRef.current = now;
+          playDotsClick();
+          setOpen((o) => !o);
+        }}
         className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
         style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
-        title="Actions"
+        title="Actions (double-cliquer pour revenir)"
       >
         <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
         <span className="w-[3.5px] h-[3.5px] rounded-full flex-shrink-0" style={{ background: "#E8842A" }} />
