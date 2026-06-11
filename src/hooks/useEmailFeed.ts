@@ -16,6 +16,10 @@ interface PageParam {
 
 const FEED_LIMIT = 50;
 
+/**
+ * Background sync hook — fetches fresh emails from providers, categorises them,
+ * and persists to the DB. Do NOT use this for tab display; use /emails/cached per-tab queries instead.
+ */
 export function useEmailFeed(enabled = true) {
   return useInfiniteQuery<EmailFeedPage, Error, { pages: EmailFeedPage[] }, string[], PageParam>({
     queryKey: ["emails-feed"],
@@ -32,7 +36,7 @@ export function useEmailFeed(enabled = true) {
     initialPageParam: { gmailCursor: null, outlookSkip: 0 },
     enabled,
     retry: false,
-    staleTime: 60_000,
+    staleTime: 3 * 60 * 1000,
     refetchInterval: 3 * 60 * 1000,
   });
 }

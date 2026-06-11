@@ -87,6 +87,7 @@ function cardClass(provider?: string) {
 
 type ReplyVariant = { label: string; content: string };
 type PanelMode = "read" | "summary" | "reply" | "compose";
+type ConflictItem = { provider: string; title: string; start: string; end: string };
 
 // Reply variants display (used inside EmailPanel in reply mode)
 
@@ -535,6 +536,8 @@ function QuickAction({
   const [showPicker, setShowPicker] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<ConflictItem[] | null>(null);
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
 
   async function handleSummarize() {
     if (!onSummarize) return;
@@ -543,7 +546,7 @@ function QuickAction({
       const res = await apiFetch<{ summary: string }>("/emails/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "" }),
+        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "", db_id: email.db_id ?? null }),
       });
       onSummarize(res.summary || "Résumé indisponible.");
     } catch {
@@ -570,10 +573,7 @@ function QuickAction({
     }
   }
 
-  // Keep action visible once completed
-  useEffect(() => {
-    if (done || confirmed) setOpen(true);
-  }, [done, confirmed]);
+  // (no force-open effect — user can collapse the panel at any time)
 
   function renderContent() {
     if (confirmed || done) {
@@ -598,22 +598,81 @@ function QuickAction({
 
       const connectedProviders = user?.calendar_providers ?? [];
       const multiProvider = connectedProviders.length > 1 && !!email.db_id;
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      const confirmTo = async (providers?: string[]) => {
+      const _doConfirm = async (providers?: string[]) => {
         if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
         setLoading(true);
         try {
           await apiFetch(`/calendar/confirm/${email.db_id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
+            body: JSON.stringify({ slot_index: 0, timezone: tz, ...(providers ? { providers } : {}) }),
           });
           setConfirmed(true);
+          setConflictInfo(null);
         } catch (err) {
           console.error("Calendar confirm failed:", err);
           setCalError(true);
         } finally { setLoading(false); }
       };
+
+      const handleConfirmRdv = async (providers?: string[]) => {
+        if (!email.db_id) { void _doConfirm(providers); return; }
+        setCheckingConflicts(true);
+        try {
+          const result = await apiFetch<{ has_conflict: boolean; conflicts: ConflictItem[] }>(
+            `/calendar/check-conflicts/${email.db_id}?timezone=${encodeURIComponent(tz)}`
+          );
+          if (result.has_conflict && result.conflicts.length > 0) {
+            setConflictInfo(result.conflicts);
+          } else {
+            void _doConfirm(providers);
+          }
+        } catch {
+          void _doConfirm(providers);
+        } finally {
+          setCheckingConflicts(false);
+        }
+      };
+
+      // Conflict warning state
+      if (conflictInfo !== null) {
+        const fmtConflictTime = (iso: string) => {
+          try { return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
+          catch { return iso; }
+        };
+        return (
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wide whitespace-nowrap">
+              ⚠ Créneau occupé
+            </p>
+            {conflictInfo.map((c, i) => (
+              <p key={i} className="text-[10px] text-muted-foreground/70 truncate max-w-[220px]">
+                {PROVIDER_META[c.provider]?.icon ?? "📅"} {c.title}
+                {c.start ? ` · ${fmtConflictTime(c.start)}` : ""}
+              </p>
+            ))}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <button
+                onClick={() => void _doConfirm()}
+                disabled={loading}
+                className="flex items-center gap-1 text-[10px] font-semibold text-white px-2 py-1 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+                style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+              >
+                {loading ? <span className="w-2.5 h-2.5 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={10}/>}
+                <span>Confirmer quand même</span>
+              </button>
+              <button
+                onClick={() => setConflictInfo(null)}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        );
+      }
 
       const rdvSummarizeBtn = (
         <button
@@ -641,19 +700,19 @@ function QuickAction({
         return (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => confirmTo()}
-              disabled={loading}
+              onClick={() => void handleConfirmRdv()}
+              disabled={loading || checkingConflicts}
               className="flex items-center gap-1 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
               style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
             >
-              {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
-              <span>{loading ? "…" : "Les deux"}</span>
+              {loading || checkingConflicts ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+              <span>{loading || checkingConflicts ? "…" : "Les deux"}</span>
             </button>
             {connectedProviders.filter(p => p in PROVIDER_META).map((p) => (
               <button
                 key={p}
-                onClick={() => confirmTo([p])}
-                disabled={loading}
+                onClick={() => void handleConfirmRdv([p])}
+                disabled={loading || checkingConflicts}
                 className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
               >
                 <span>{PROVIDER_META[p].icon}</span>
@@ -669,13 +728,13 @@ function QuickAction({
       return (
         <div className="flex items-center gap-1.5">
           <button
-            onClick={multiProvider ? () => setShowPicker(true) : () => confirmTo()}
-            disabled={loading}
+            onClick={multiProvider ? () => setShowPicker(true) : () => void handleConfirmRdv()}
+            disabled={loading || checkingConflicts}
             className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
             style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
           >
-            {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
-            <span>{loading ? "…" : "Confirmer RDV"}</span>
+            {loading || checkingConflicts ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+            <span>{loading ? "…" : checkingConflicts ? "Vérification…" : "Confirmer RDV"}</span>
           </button>
           {rdvSummarizeBtn}
           {rdvReplyBtn}
@@ -758,7 +817,17 @@ function QuickAction({
       {/* Three orange vertical dots — always visible trigger */}
       <button
         data-tour="quick-action"
-        onClick={() => { playDotsClick(); setOpen((o) => !o); }}
+        onClick={() => {
+          playDotsClick();
+          if (open) {
+            setOpen(false);
+            setShowPicker(false);
+            setConflictInfo(null);
+            setCalError(false);
+          } else {
+            setOpen(true);
+          }
+        }}
         className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
         style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
         title="Actions"
@@ -770,10 +839,10 @@ function QuickAction({
 
       {/* Action content — slides in horizontally to the right */}
       <div
-        className="overflow-hidden transition-all duration-300 ease-out"
-        style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
+        className={`transition-all duration-300 ease-out ${open ? "overflow-x-auto" : "overflow-hidden"}`}
+        style={{ maxWidth: open ? "460px" : "0", opacity: open ? 1 : 0 }}
       >
-        <div className="flex items-center">
+        <div className="flex items-center gap-1.5 pb-0.5">
           {renderContent()}
         </div>
       </div>
@@ -803,7 +872,7 @@ export default function EmailsPage() {
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
   const [panelComposerText, setPanelComposerText] = useState<string>("");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null); // kept for future infinite scroll on detail load
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
     setSelectedEmail(email);
@@ -828,60 +897,55 @@ export default function EmailsPage() {
 
   const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
 
-  const {
-    data: feedData,
-    isLoading: feedLoading,
-    isFetching,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useEmailFeed(anyConnected);
+  // Background sync: fetch fresh emails from providers → categorise → store to DB.
+  // Fires once on mount then every 3 min. Not used for display.
+  const { data: feedData, isFetching: feedSyncing } = useEmailFeed(anyConnected);
 
-  // Fast cached read — shows last-known emails instantly while the feed loads in background
-  const { data: cachedData } = useQuery({
-    queryKey: ["emails-cached"],
-    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>("/emails/cached?limit=50"),
+  // Per-tab display: query the DB directly — instant, always shows correct categories.
+  const {
+    data: tabData,
+    isLoading: tabLoading,
+    error,
+  } = useQuery({
+    queryKey: ["emails-tab", activeTab],
+    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>(
+      `/emails/cached?category=${activeTab}&limit=200`
+    ),
     enabled: anyConnected,
     staleTime: 30_000,
+    refetchInterval: 3 * 60 * 1000,
   });
 
-  const allEmails =
-    feedData?.pages.flatMap((p) => p.emails) ??
-    cachedData?.emails ??
-    [];
-  // Don't show the full-page spinner when cached emails are already available
-  const isLoading = feedLoading && !cachedData?.emails?.length;
-  const isRefreshing = isFetching && !feedLoading;
+  // Per-category counts: one GROUP BY query — feeds all tab badges + sidebar total.
+  const { data: countsData } = useQuery({
+    queryKey: ["emails-counts"],
+    queryFn: () => apiFetch<Record<string, number>>("/emails/counts"),
+    enabled: anyConnected,
+    staleTime: 30_000,
+    refetchInterval: 3 * 60 * 1000,
+  });
 
-  // Compute tab counts over ALL loaded emails
-  const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-  for (const e of allEmails) {
-    const cat = e.category ?? "info";
-    tabCounts[cat in tabCounts ? cat : "info"]++;
-  }
+  // When background sync completes (feedData changes), refresh all tab caches from DB.
+  useEffect(() => {
+    if (feedData) {
+      void queryClient.invalidateQueries({ queryKey: ["emails-tab"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-counts"] });
+    }
+  }, [feedData, queryClient]);
 
-  // Filtered list for the active tab
+  const allEmails = tabData?.emails ?? [];
+  const isLoading = tabLoading && !allEmails.length;
+  const isRefreshing = feedSyncing;
+
+  // Tab counts from dedicated counts endpoint — all tabs get their badge at once.
+  const tabCounts = countsData ?? { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
+  const totalEmailCount = (Object.values(tabCounts) as number[]).reduce((a, b) => a + b, 0);
+
+  // Backend already filtered by category; keep client filter as bulletproof safety net.
   const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
 
   // Sync total email count to sidebar badge
-  useEffect(() => { setEmailCount(allEmails.length); }, [allEmails.length, setEmailCount]);
-
-  // Infinite scroll — when sentinel is visible, load next page
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  useEffect(() => { setEmailCount(totalEmailCount); }, [totalEmailCount, setEmailCount]);
 
   // OAuth callbacks
   useEffect(() => {
@@ -1099,19 +1163,8 @@ export default function EmailsPage() {
               />
             ))}
 
-            {/* Infinite scroll sentinel */}
-            <div ref={sentinelRef} className="h-1" />
-
-            {/* Loading next page */}
-            {isFetchingNextPage && (
-              <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
-                <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
-                <span className="text-xs">Chargement de la suite…</span>
-              </div>
-            )}
-
             {/* End of list per tab */}
-            {!hasNextPage && !isFetchingNextPage && filteredEmails.length > 0 && (
+            {!tabLoading && filteredEmails.length > 0 && (
               <p className="text-center text-xs text-muted-foreground/30 py-3">
                 — Tous les emails de cette catégorie sont chargés —
               </p>
