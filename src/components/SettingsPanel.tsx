@@ -8,6 +8,7 @@ import {
   setNotificationPreference,
 } from "@/lib/notificationPreferences";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
+import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { useAppleCalendarConnection } from "@/hooks/useAppleCalendarConnection";
 import { GmailConnectModal } from "@/components/GmailConnectModal";
 import { AppleCalendarConnectModal } from "@/components/AppleCalendarConnectModal";
@@ -35,9 +36,26 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
 export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
   const { connected: gmailConnected, gmailEmail, disconnecting: gmailDisconnecting, disconnect: disconnectGmail } = useGmailConnection();
+  const { connected: outlookConnected, outlookEmail } = useOutlookConnection();
   const { connected: appleConnected, appleEmail, disconnecting: appleDisconnecting, disconnect: disconnectApple } = useAppleCalendarConnection();
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showAppleModal, setShowAppleModal] = useState(false);
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
+
+  const handleConnectOutlook = async () => {
+    setConnectingOutlook(true);
+    try {
+      const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
+      if (window.irisDesktop?.openExternal) {
+        window.irisDesktop.openExternal(auth_url);
+        setConnectingOutlook(false);
+      } else {
+        window.location.href = auth_url;
+      }
+    } catch {
+      setConnectingOutlook(false);
+    }
+  };
   const [desktopNotif, setDesktopNotif] = useState(isDesktopNotificationsEnabled());
   const [soundAlerts, setSoundAlerts] = useState(isSoundAlertsEnabled());
   const initialName = user?.name ?? user?.email?.split("@")[0] ?? "";
@@ -290,6 +308,34 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
                         className="text-[10px] text-primary hover:opacity-80 transition-opacity flex-shrink-0 border border-primary/40 rounded-lg px-2 py-1"
                       >
                         Connecter
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Outlook */}
+                <div className="rounded-xl border bg-card border-border overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                      <Mail size={14} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-foreground">Outlook</div>
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {outlookConnected ? (outlookEmail ?? "Connecté") : "Non connecté"}
+                      </div>
+                    </div>
+                    {outlookConnected ? (
+                      <span className="text-[10px] flex-shrink-0 px-2 py-1 rounded-lg border text-primary border-primary/30 bg-primary/5">
+                        Actif
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => void handleConnectOutlook()}
+                        disabled={connectingOutlook}
+                        className="text-[10px] text-primary hover:opacity-80 transition-opacity flex-shrink-0 border border-primary/40 rounded-lg px-2 py-1 disabled:opacity-50"
+                      >
+                        {connectingOutlook ? "Redirection…" : "Connecter"}
                       </button>
                     )}
                   </div>
