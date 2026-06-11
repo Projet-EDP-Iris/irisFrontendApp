@@ -16,14 +16,17 @@ interface PageParam {
 
 const FEED_LIMIT = 50;
 
-export function useEmailFeed(enabled = true, category?: string) {
+/**
+ * Background sync hook — fetches fresh emails from providers, categorises them,
+ * and persists to the DB. Do NOT use this for tab display; use /emails/cached per-tab queries instead.
+ */
+export function useEmailFeed(enabled = true) {
   return useInfiniteQuery<EmailFeedPage, Error, { pages: EmailFeedPage[] }, string[], PageParam>({
-    queryKey: ["emails-feed", category ?? "all"],
+    queryKey: ["emails-feed"],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: String(FEED_LIMIT) });
       if (pageParam.gmailCursor) params.set("gmail_cursor", pageParam.gmailCursor);
       if (pageParam.outlookSkip > 0) params.set("outlook_skip", String(pageParam.outlookSkip));
-      if (category) params.set("category", category);
       return apiFetch<EmailFeedPage>(`/emails/feed?${params}`);
     },
     getNextPageParam: (lastPage) =>
@@ -33,7 +36,7 @@ export function useEmailFeed(enabled = true, category?: string) {
     initialPageParam: { gmailCursor: null, outlookSkip: 0 },
     enabled,
     retry: false,
-    staleTime: 60_000,
+    staleTime: 3 * 60 * 1000,
     refetchInterval: 3 * 60 * 1000,
   });
 }

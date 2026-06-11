@@ -872,7 +872,7 @@ export default function EmailsPage() {
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
   const [panelComposerText, setPanelComposerText] = useState<string>("");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null); // kept for future infinite scroll on detail load
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
     setSelectedEmail(email);
@@ -897,60 +897,45 @@ export default function EmailsPage() {
 
   const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
 
-  const {
-    data: feedData,
-    isLoading: feedLoading,
-    isFetching,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useEmailFeed(anyConnected, activeTab);
+  // Background sync: fetch fresh emails from providers → categorise → store to DB.
+  // Fires once on mount then every 3 min. Not used for display.
+  const { data: feedData, isFetching: feedSyncing } = useEmailFeed(anyConnected);
 
-  // Fast cached read — shows last-known emails instantly while the feed loads in background
-  const { data: cachedData } = useQuery({
-    queryKey: ["emails-cached"],
-    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>("/emails/cached?limit=50"),
+  // Per-tab display: query the DB directly — instant, always shows correct categories.
+  const {
+    data: tabData,
+    isLoading: tabLoading,
+    error,
+  } = useQuery({
+    queryKey: ["emails-tab", activeTab],
+    queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>(
+      `/emails/cached?category=${activeTab}&limit=200`
+    ),
     enabled: anyConnected,
     staleTime: 30_000,
+    refetchInterval: 3 * 60 * 1000,
   });
 
-  // Per-category feed: backend already filters by activeTab, so allEmails is tab-specific.
-  // Fall back to cachedData filtered by activeTab while the feed loads.
-  const allEmails =
-    feedData?.pages.flatMap((p) => p.emails) ??
-    cachedData?.emails?.filter((e) => (e.category ?? "info") === activeTab) ??
-    [];
-  // Don't show the full-page spinner when cached emails are already available
-  const isLoading = feedLoading && !cachedData?.emails?.length;
-  const isRefreshing = isFetching && !feedLoading;
+  // When background sync completes (feedData changes), refresh all tab caches from DB.
+  useEffect(() => {
+    if (feedData) {
+      void queryClient.invalidateQueries({ queryKey: ["emails-tab"] });
+    }
+  }, [feedData, queryClient]);
 
-  // Tab counts: show the loaded count for the active tab.
-  // Other tabs show no badge until visited (their query caches fill in on first visit).
+  const allEmails = tabData?.emails ?? [];
+  const isLoading = tabLoading && !allEmails.length;
+  const isRefreshing = feedSyncing;
+
+  // Tab counts: each tab shows the count loaded from its DB query.
   const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
   tabCounts[activeTab] = allEmails.length;
 
-  // Emails are already filtered by the backend; keep client filter as safety net.
+  // Backend already filtered by category; keep client filter as bulletproof safety net.
   const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
 
   // Sync total email count to sidebar badge
   useEffect(() => { setEmailCount(allEmails.length); }, [allEmails.length, setEmailCount]);
-
-  // Infinite scroll — when sentinel is visible, load next page
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // OAuth callbacks
   useEffect(() => {
@@ -1168,19 +1153,8 @@ export default function EmailsPage() {
               />
             ))}
 
-            {/* Infinite scroll sentinel */}
-            <div ref={sentinelRef} className="h-1" />
-
-            {/* Loading next page */}
-            {isFetchingNextPage && (
-              <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
-                <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"/>
-                <span className="text-xs">Chargement de la suite…</span>
-              </div>
-            )}
-
             {/* End of list per tab */}
-            {!hasNextPage && !isFetchingNextPage && filteredEmails.length > 0 && (
+            {!tabLoading && filteredEmails.length > 0 && (
               <p className="text-center text-xs text-muted-foreground/30 py-3">
                 — Tous les emails de cette catégorie sont chargés —
               </p>
