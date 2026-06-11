@@ -130,7 +130,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <AnimatedHamburger collapsed={sidebarCollapsed} />
           </button>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: selectedIcon.bg }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden" style={{ background: selectedIcon.bg }}>
             {selectedIcon.icon}
           </div>
           <AnimatePresence>

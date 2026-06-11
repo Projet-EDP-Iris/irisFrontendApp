@@ -531,12 +531,14 @@ function QuickAction({
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
+  const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
   const lastClickTimeRef = useRef<number>(0);
+  const manuallyClosed = useRef(false);
 
   async function handleSummarize() {
     if (!onSummarize) return;
@@ -572,24 +574,33 @@ function QuickAction({
     }
   }
 
-  // Keep action visible once completed
+  // Keep action visible once completed, unless the user explicitly closed it
   useEffect(() => {
-    if (done || confirmed) setOpen(true);
+    if ((done || confirmed) && !manuallyClosed.current) setOpen(true);
   }, [done, confirmed]);
 
   function renderContent() {
     if (confirmed) {
       const dateLabel = confirmedSlot
-        ? new Date(confirmedSlot.start_time).toLocaleDateString("fr-FR", {
+        ? new Date(confirmedSlot.start_time).toLocaleString("fr-FR", {
             day: "numeric",
             month: "long",
             year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
           })
         : null;
       return (
-        <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
-          <CheckCircle2 size={13} />
-          <span>RDV ajouté{dateLabel ? ` · ${dateLabel}` : ""}</span>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+            <CheckCircle2 size={13} />
+            <span>RDV ajouté{dateLabel ? ` · ${dateLabel}` : ""}</span>
+          </div>
+          {calProviderErrors.length > 0 && (
+            <p className="text-[10px] text-orange-400 leading-tight">
+              {calProviderErrors.join(" · ")}
+            </p>
+          )}
         </div>
       );
     }
@@ -625,12 +636,14 @@ function QuickAction({
         try {
           const res = await apiFetch<{
             slot: { start_time: string; end_time: string };
-            providers: { provider: string; error: string | null }[];
+            providers: { provider: string; event_id?: string | null; error: string | null }[];
           }>(`/calendar/confirm/${email.db_id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
           });
+          const failed = res.providers?.filter(p => p.error).map(p => `${p.provider}: ${p.error}`) ?? [];
+          setCalProviderErrors(failed);
           setConfirmedSlot(res.slot ?? null);
           setConfirmed(true);
         } catch (err) {
@@ -788,10 +801,11 @@ function QuickAction({
             // Double-click: go back one step
             lastClickTimeRef.current = 0;
             if (showPicker) { setShowPicker(false); }
-            else { setOpen(false); }
+            else { manuallyClosed.current = true; setOpen(false); }
             return;
           }
           lastClickTimeRef.current = now;
+          manuallyClosed.current = false;
           playDotsClick();
           setOpen((o) => !o);
         }}
