@@ -546,7 +546,7 @@ function QuickAction({
       const res = await apiFetch<{ summary: string }>("/emails/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "" }),
+        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "", db_id: email.db_id ?? null }),
       });
       onSummarize(res.summary || "Résumé indisponible.");
     } catch {
@@ -839,10 +839,10 @@ function QuickAction({
 
       {/* Action content — slides in horizontally to the right */}
       <div
-        className="overflow-hidden transition-all duration-300 ease-out"
-        style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
+        className={`transition-all duration-300 ease-out ${open ? "overflow-x-auto" : "overflow-hidden"}`}
+        style={{ maxWidth: open ? "460px" : "0", opacity: open ? 1 : 0 }}
       >
-        <div className="flex items-center">
+        <div className="flex items-center gap-1.5 pb-0.5">
           {renderContent()}
         </div>
       </div>
@@ -916,10 +916,20 @@ export default function EmailsPage() {
     refetchInterval: 3 * 60 * 1000,
   });
 
+  // Per-category counts: one GROUP BY query — feeds all tab badges + sidebar total.
+  const { data: countsData } = useQuery({
+    queryKey: ["emails-counts"],
+    queryFn: () => apiFetch<Record<string, number>>("/emails/counts"),
+    enabled: anyConnected,
+    staleTime: 30_000,
+    refetchInterval: 3 * 60 * 1000,
+  });
+
   // When background sync completes (feedData changes), refresh all tab caches from DB.
   useEffect(() => {
     if (feedData) {
       void queryClient.invalidateQueries({ queryKey: ["emails-tab"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-counts"] });
     }
   }, [feedData, queryClient]);
 
@@ -927,15 +937,15 @@ export default function EmailsPage() {
   const isLoading = tabLoading && !allEmails.length;
   const isRefreshing = feedSyncing;
 
-  // Tab counts: each tab shows the count loaded from its DB query.
-  const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-  tabCounts[activeTab] = allEmails.length;
+  // Tab counts from dedicated counts endpoint — all tabs get their badge at once.
+  const tabCounts = countsData ?? { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
+  const totalEmailCount = (Object.values(tabCounts) as number[]).reduce((a, b) => a + b, 0);
 
   // Backend already filtered by category; keep client filter as bulletproof safety net.
   const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
 
   // Sync total email count to sidebar badge
-  useEffect(() => { setEmailCount(allEmails.length); }, [allEmails.length, setEmailCount]);
+  useEffect(() => { setEmailCount(totalEmailCount); }, [totalEmailCount, setEmailCount]);
 
   // OAuth callbacks
   useEffect(() => {
