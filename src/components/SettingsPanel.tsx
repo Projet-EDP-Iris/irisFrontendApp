@@ -150,7 +150,7 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
                   <button
                     key={icon.id}
                     onClick={() => setSelectedIcon(icon.id)}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${selectedIcon === icon.id ? "ring-2 ring-primary" : ""}`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all overflow-hidden ${selectedIcon === icon.id ? "ring-2 ring-primary" : ""}`}
                     style={{ background: icon.bg }}
                   >
                     {icon.icon}
