@@ -87,6 +87,7 @@ function cardClass(provider?: string) {
 
 type ReplyVariant = { label: string; content: string };
 type PanelMode = "read" | "summary" | "reply" | "compose";
+type ConflictItem = { provider: string; title: string; start: string; end: string };
 
 // Reply variants display (used inside EmailPanel in reply mode)
 
@@ -535,6 +536,8 @@ function QuickAction({
   const [showPicker, setShowPicker] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<ConflictItem[] | null>(null);
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
 
   async function handleSummarize() {
     if (!onSummarize) return;
@@ -570,10 +573,7 @@ function QuickAction({
     }
   }
 
-  // Keep action visible once completed
-  useEffect(() => {
-    if (done || confirmed) setOpen(true);
-  }, [done, confirmed]);
+  // (no force-open effect — user can collapse the panel at any time)
 
   function renderContent() {
     if (confirmed || done) {
@@ -598,22 +598,81 @@ function QuickAction({
 
       const connectedProviders = user?.calendar_providers ?? [];
       const multiProvider = connectedProviders.length > 1 && !!email.db_id;
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      const confirmTo = async (providers?: string[]) => {
+      const _doConfirm = async (providers?: string[]) => {
         if (!email.db_id) { window.open(buildCalendarUrl(email), "_blank"); setConfirmed(true); return; }
         setLoading(true);
         try {
           await apiFetch(`/calendar/confirm/${email.db_id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slot_index: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ...(providers ? { providers } : {}) }),
+            body: JSON.stringify({ slot_index: 0, timezone: tz, ...(providers ? { providers } : {}) }),
           });
           setConfirmed(true);
+          setConflictInfo(null);
         } catch (err) {
           console.error("Calendar confirm failed:", err);
           setCalError(true);
         } finally { setLoading(false); }
       };
+
+      const handleConfirmRdv = async (providers?: string[]) => {
+        if (!email.db_id) { void _doConfirm(providers); return; }
+        setCheckingConflicts(true);
+        try {
+          const result = await apiFetch<{ has_conflict: boolean; conflicts: ConflictItem[] }>(
+            `/calendar/check-conflicts/${email.db_id}?timezone=${encodeURIComponent(tz)}`
+          );
+          if (result.has_conflict && result.conflicts.length > 0) {
+            setConflictInfo(result.conflicts);
+          } else {
+            void _doConfirm(providers);
+          }
+        } catch {
+          void _doConfirm(providers);
+        } finally {
+          setCheckingConflicts(false);
+        }
+      };
+
+      // Conflict warning state
+      if (conflictInfo !== null) {
+        const fmtConflictTime = (iso: string) => {
+          try { return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
+          catch { return iso; }
+        };
+        return (
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wide whitespace-nowrap">
+              ⚠ Créneau occupé
+            </p>
+            {conflictInfo.map((c, i) => (
+              <p key={i} className="text-[10px] text-muted-foreground/70 truncate max-w-[220px]">
+                {PROVIDER_META[c.provider]?.icon ?? "📅"} {c.title}
+                {c.start ? ` · ${fmtConflictTime(c.start)}` : ""}
+              </p>
+            ))}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <button
+                onClick={() => void _doConfirm()}
+                disabled={loading}
+                className="flex items-center gap-1 text-[10px] font-semibold text-white px-2 py-1 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+                style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+              >
+                {loading ? <span className="w-2.5 h-2.5 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={10}/>}
+                <span>Confirmer quand même</span>
+              </button>
+              <button
+                onClick={() => setConflictInfo(null)}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        );
+      }
 
       const rdvSummarizeBtn = (
         <button
@@ -641,19 +700,19 @@ function QuickAction({
         return (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => confirmTo()}
-              disabled={loading}
+              onClick={() => void handleConfirmRdv()}
+              disabled={loading || checkingConflicts}
               className="flex items-center gap-1 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
               style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
             >
-              {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
-              <span>{loading ? "…" : "Les deux"}</span>
+              {loading || checkingConflicts ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+              <span>{loading || checkingConflicts ? "…" : "Les deux"}</span>
             </button>
             {connectedProviders.filter(p => p in PROVIDER_META).map((p) => (
               <button
                 key={p}
-                onClick={() => confirmTo([p])}
-                disabled={loading}
+                onClick={() => void handleConfirmRdv([p])}
+                disabled={loading || checkingConflicts}
                 className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
               >
                 <span>{PROVIDER_META[p].icon}</span>
@@ -669,13 +728,13 @@ function QuickAction({
       return (
         <div className="flex items-center gap-1.5">
           <button
-            onClick={multiProvider ? () => setShowPicker(true) : () => confirmTo()}
-            disabled={loading}
+            onClick={multiProvider ? () => setShowPicker(true) : () => void handleConfirmRdv()}
+            disabled={loading || checkingConflicts}
             className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
             style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
           >
-            {loading ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
-            <span>{loading ? "…" : "Confirmer RDV"}</span>
+            {loading || checkingConflicts ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <Calendar size={11}/>}
+            <span>{loading ? "…" : checkingConflicts ? "Vérification…" : "Confirmer RDV"}</span>
           </button>
           {rdvSummarizeBtn}
           {rdvReplyBtn}
@@ -758,7 +817,17 @@ function QuickAction({
       {/* Three orange vertical dots — always visible trigger */}
       <button
         data-tour="quick-action"
-        onClick={() => { playDotsClick(); setOpen((o) => !o); }}
+        onClick={() => {
+          playDotsClick();
+          if (open) {
+            setOpen(false);
+            setShowPicker(false);
+            setConflictInfo(null);
+            setCalError(false);
+          } else {
+            setOpen(true);
+          }
+        }}
         className="flex flex-col items-center justify-center gap-[3.5px] px-1.5 py-2 rounded-lg hover:bg-orange-500/10 active:scale-95 transition-all flex-shrink-0"
         style={{ opacity: category === "info" && !open && !done ? 0.35 : 1 }}
         title="Actions"
@@ -836,7 +905,7 @@ export default function EmailsPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useEmailFeed(anyConnected);
+  } = useEmailFeed(anyConnected, activeTab);
 
   // Fast cached read — shows last-known emails instantly while the feed loads in background
   const { data: cachedData } = useQuery({
@@ -846,22 +915,22 @@ export default function EmailsPage() {
     staleTime: 30_000,
   });
 
+  // Per-category feed: backend already filters by activeTab, so allEmails is tab-specific.
+  // Fall back to cachedData filtered by activeTab while the feed loads.
   const allEmails =
     feedData?.pages.flatMap((p) => p.emails) ??
-    cachedData?.emails ??
+    cachedData?.emails?.filter((e) => (e.category ?? "info") === activeTab) ??
     [];
   // Don't show the full-page spinner when cached emails are already available
   const isLoading = feedLoading && !cachedData?.emails?.length;
   const isRefreshing = isFetching && !feedLoading;
 
-  // Compute tab counts over ALL loaded emails
+  // Tab counts: show the loaded count for the active tab.
+  // Other tabs show no badge until visited (their query caches fill in on first visit).
   const tabCounts: Record<string, number> = { rdv: 0, action: 0, attente: 0, bonsplans: 0, info: 0 };
-  for (const e of allEmails) {
-    const cat = e.category ?? "info";
-    tabCounts[cat in tabCounts ? cat : "info"]++;
-  }
+  tabCounts[activeTab] = allEmails.length;
 
-  // Filtered list for the active tab
+  // Emails are already filtered by the backend; keep client filter as safety net.
   const filteredEmails = allEmails.filter((e) => (e.category ?? "info") === activeTab);
 
   // Sync total email count to sidebar badge

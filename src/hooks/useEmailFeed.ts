@@ -16,13 +16,14 @@ interface PageParam {
 
 const FEED_LIMIT = 50;
 
-export function useEmailFeed(enabled = true) {
+export function useEmailFeed(enabled = true, category?: string) {
   return useInfiniteQuery<EmailFeedPage, Error, { pages: EmailFeedPage[] }, string[], PageParam>({
-    queryKey: ["emails-feed"],
+    queryKey: ["emails-feed", category ?? "all"],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: String(FEED_LIMIT) });
       if (pageParam.gmailCursor) params.set("gmail_cursor", pageParam.gmailCursor);
       if (pageParam.outlookSkip > 0) params.set("outlook_skip", String(pageParam.outlookSkip));
+      if (category) params.set("category", category);
       return apiFetch<EmailFeedPage>(`/emails/feed?${params}`);
     },
     getNextPageParam: (lastPage) =>

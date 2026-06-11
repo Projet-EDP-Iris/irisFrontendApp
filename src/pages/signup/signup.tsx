@@ -6,7 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
 
 const TERMS_TEXT = `CONDITIONS GÉNÉRALES D'UTILISATION – IRIS
-Version 1.0 — Juin 2026
+Version 1.1 — Juin 2026
 
 1. PRÉSENTATION DU SERVICE
 Iris est une application de gestion intelligente d'emails et de calendrier intégrant des fonctionnalités d'intelligence artificielle pour l'analyse, le tri et la synthèse de vos communications. Iris est édité par son équipe de développement et proposé en version bêta.
@@ -22,6 +22,9 @@ Iris vous permet de connecter vos comptes Gmail, Outlook et Apple Calendar via O
 
 5. DONNÉES PERSONNELLES
 Iris collecte et traite vos données personnelles (adresse e-mail, nom, contenu des emails si connectés) exclusivement pour vous fournir le service. Vos données sont stockées de manière sécurisée et ne sont jamais vendues ni transmises à des tiers à des fins commerciales. Conformément à la réglementation applicable, vous disposez d'un droit d'accès, de rectification, de portabilité et de suppression de vos données. Pour exercer ces droits, contactez-nous à l'adresse indiquée à l'article 11.
+
+5.bis TRAITEMENT PAR INTELLIGENCE ARTIFICIELLE ET SOUS-TRAITANTS
+Certaines fonctionnalités optionnelles d'Iris (résumé d'email, suggestion de réponse, classification avancée) font appel à l'API d'OpenAI (OpenAI, LLC, États-Unis). Lorsque vous utilisez ces fonctions, une partie du contenu de l'email concerné — l'objet et jusqu'à 1 500 caractères du corps du message — est transmise aux serveurs d'OpenAI aux seules fins du traitement demandé. Aucun email complet n'est transmis. Ces transmissions n'ont lieu que sur action explicite de votre part (clic sur « Résumer » ou « Répondre »). La classification principale des emails s'effectue quant à elle localement sur nos serveurs, sans recours à OpenAI. OpenAI agit en qualité de sous-traitant au sens de l'article 28 du RGPD. Iris a conclu un accord de traitement des données (DPA) avec OpenAI. Vous pouvez ne pas utiliser ces fonctions optionnelles sans impact sur les fonctionnalités principales d'Iris.
 
 6. USAGE ACCEPTABLE
 Il est interdit d'utiliser Iris à des fins illicites, frauduleuses ou nuisibles à des tiers. Toute tentative d'accès non autorisé aux systèmes d'Iris ou de contournement des mesures de sécurité est strictement interdite et pourra faire l'objet de poursuites.
