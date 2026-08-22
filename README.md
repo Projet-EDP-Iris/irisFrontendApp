@@ -110,6 +110,8 @@ rm -rf node_modules package-lock.json && npm install
 
 **OAuth redirect not working locally:** the backend must be running on `http://localhost:8000` and the callback URL must be registered in Google/Microsoft developer consoles.
 
+**macOS says "Iris is damaged and can't be opened":** the app is ad-hoc signed but not Apple-notarized (notarization requires a paid Apple Developer account). This is expected on first launch — go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** (or right-click the app → **Open**). You only need to do this once.
+
 ---
 
 ### Repository Rules
@@ -196,6 +198,10 @@ src/
 ├── types/          # Interfaces TypeScript partagées
 └── constants/      # Données statiques (icônes de profil)
 ```
+
+### Dépannage
+
+**macOS affiche "Iris est endommagée et ne peut pas être ouverte" :** l'app est signée en ad-hoc mais pas notariée par Apple (la notarisation nécessite un compte développeur Apple payant). C'est normal au premier lancement — allez dans **Réglages Système → Confidentialité et sécurité**, faites défiler et cliquez sur **"Ouvrir quand même"** (ou clic droit sur l'app → **Ouvrir**). Une seule fois suffit.
 
 ### Règles du dépôt
 
