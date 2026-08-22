@@ -92,7 +92,9 @@ export default function HomePage() {
         {/* Energy ripple waves — sit clearly outside the gauge (button+gauge stay
             centered inside the innermost ripple, not touching it), expand to cover
             most of the page, and dent/undulate toward the cursor. */}
-        <RippleField active={isIrisActive} mouseAngleRef={mouseAngleRef} mouseDistRef={mouseDistRef} />
+        {isIrisActive && (
+          <RippleField active={isIrisActive} mouseAngleRef={mouseAngleRef} mouseDistRef={mouseDistRef} />
+        )}
 
         {/* Rotating energy ring */}
         {isIrisActive && (

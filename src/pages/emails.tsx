@@ -575,14 +575,14 @@ function QuickAction({
   const manuallyClosed = useRef(false);
 
   async function handleMarkDone() {
-    if (email.db_id) {
-      try {
-        await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
-        void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
-      } catch {
-        // best-effort — still reflect completion locally even if the call failed
-      }
+    if (!email.db_id) return;
+    try {
+      await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
+    } catch {
+      return;
     }
+    void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+    void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
     setDone(true);
   }
 
