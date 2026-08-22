@@ -561,8 +561,10 @@ function QuickAction({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  // Seeded from server data (see issue #99) so "Fait ✓"/"RDV ajouté" correctly show
+  // right after remount (logout/login, app restart) instead of always starting blank.
+  const [done, setDone] = useState(email.is_done ?? false);
+  const [confirmed, setConfirmed] = useState(email.status === "confirmed");
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
   const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -931,7 +933,6 @@ export default function EmailsPage() {
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
   const [panelComposerText, setPanelComposerText] = useState<string>("");
   const [panelPlanSteps, setPanelPlanSteps] = useState<string[] | null>(null);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
@@ -1144,8 +1145,18 @@ export default function EmailsPage() {
     setPanelReplyVariants(null);
     setPanelComposerText("");
     setPanelPlanSteps(null);
-    setReadIds((prev) => new Set(prev).add(email.message_id));
-  }, []);
+
+    // Persist "read" server-side (see issue #99) so it survives logout/login,
+    // instead of the old local-only readIds Set that reset on every remount.
+    if (email.db_id && !email.is_read) {
+      void apiFetch(`/emails/${email.db_id}/mark-read`, { method: "POST" })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+        })
+        .catch(() => {});
+    }
+  }, [queryClient]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1268,7 +1279,7 @@ export default function EmailsPage() {
                 email={email}
                 isIrisActive={isIrisActive}
                 isSelected={selectedEmail?.message_id === email.message_id}
-                isRead={readIds.has(email.message_id)}
+                isRead={email.is_read ?? false}
                 onSelect={() => handleSelectEmail(email)}
                 onSummarize={(summary) => { setPanelSummary(summary); openPanel(email, "summary"); }}
                 onGenerateReply={(variants) => { setPanelReplyVariants(variants); openPanel(email, "reply"); }}
