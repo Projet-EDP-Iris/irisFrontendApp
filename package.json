@@ -44,7 +44,12 @@
       "artifactName": "Iris.dmg"
     },
     "protocols": [
-      { "name": "Iris", "schemes": ["iris"] }
+      {
+        "name": "Iris",
+        "schemes": [
+          "iris"
+        ]
+      }
     ],
     "publish": [
       {
@@ -54,6 +59,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@marsidev/react-turnstile": "^1.6.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-aspect-ratio": "^1.1.3",

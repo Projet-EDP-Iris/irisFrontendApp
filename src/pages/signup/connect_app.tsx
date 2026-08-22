@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
@@ -30,6 +31,7 @@ export default function IrisConnectApps() {
   const [accountCreated, setAccountCreated] = useState(false);
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string>("");
   const { signup } = useAuth();
   const [_, navigate] = useLocation();
 
@@ -51,6 +53,7 @@ export default function IrisConnectApps() {
         name: draft.name,
         profile_icon: draft.profile_icon,
         accepted_terms: draft.acceptedTerms,
+        captcha_token: captchaToken,
       });
       setAccountCreated(true);
       return true;
@@ -156,6 +159,13 @@ export default function IrisConnectApps() {
         >
           Cliquez sur un service pour démarrer la connexion OAuth
         </div>
+
+        {/* Turnstile CAPTCHA — resolved automatically in background when component mounts */}
+        <Turnstile
+          siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "1x00000000000000000000AA"}
+          onSuccess={setCaptchaToken}
+          options={{ size: "invisible" }}
+        />
 
         <div className="flex gap-3 mt-4">
           <button
