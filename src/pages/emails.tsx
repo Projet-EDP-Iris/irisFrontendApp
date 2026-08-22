@@ -566,6 +566,16 @@ function QuickAction({
   const [done, setDone] = useState(email.is_done ?? false);
   const [confirmed, setConfirmed] = useState(email.status === "confirmed");
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
+
+  // A server refresh (e.g. another device, or a refetch completing) can update
+  // email.is_done/status while this card stays mounted — the useState initializers
+  // above only run once, so pick up later terminal-state changes here too.
+  // One-directional on purpose: only flips to true, never reverts an optimistic
+  // local true back to false while a request is still in flight.
+  useEffect(() => {
+    if (email.is_done) setDone(true);
+    if (email.status === "confirmed") setConfirmed(true);
+  }, [email.is_done, email.status]);
   const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
@@ -577,15 +587,20 @@ function QuickAction({
   const manuallyClosed = useRef(false);
 
   async function handleMarkDone() {
-    if (email.db_id) {
-      try {
-        await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
-        void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
-      } catch {
-        // best-effort — still reflect completion locally even if the call failed
-      }
+    if (!email.db_id) {
+      // No server-side record to persist against — nothing to fail, just reflect locally.
+      setDone(true);
+      return;
     }
-    setDone(true);
+    try {
+      await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
+      void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+      setDone(true);
+    } catch {
+      // Don't show a false "Fait ✓" if persistence failed — leave the action
+      // visible so the user can retry, instead of silently losing the click.
+    }
   }
 
   async function handleSummarize() {
@@ -712,6 +727,10 @@ function QuickAction({
           setConfirmedSlot(res.slot ?? null);
           setConfirmed(true);
           void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          // Without this, switching tabs and back remounts QuickAction from the
+          // stale cached email (still status !== "confirmed") and the "Confirmer
+          // RDV" button reappears even though the RDV was actually confirmed.
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
         } catch (err) {
           console.error("Calendar confirm failed:", err);
           setCalError(true);
@@ -935,6 +954,22 @@ export default function EmailsPage() {
   const [panelPlanSteps, setPanelPlanSteps] = useState<string[] | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // Persist "read" server-side (see issue #99) so it survives logout/login,
+  // instead of the old local-only readIds Set that reset on every remount.
+  // Called from every path that opens the panel (read, summary, reply, plan) —
+  // not just the plain card click, since QuickAction's buttons stop click
+  // propagation and would otherwise bypass this entirely.
+  function markEmailRead(email: EmailItem) {
+    if (email.db_id && !email.is_read) {
+      void apiFetch(`/emails/${email.db_id}/mark-read`, { method: "POST" })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+        })
+        .catch(() => {});
+    }
+  }
+
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
     setSelectedEmail(email);
     setPanelMode(mode);
@@ -942,6 +977,7 @@ export default function EmailsPage() {
     if (mode !== "reply" && mode !== "compose") setPanelReplyVariants(null);
     if (mode !== "compose") setPanelComposerText("");
     if (mode !== "plan") setPanelPlanSteps(null);
+    markEmailRead(email);
   }
 
   function closePanel() {
@@ -1145,17 +1181,7 @@ export default function EmailsPage() {
     setPanelReplyVariants(null);
     setPanelComposerText("");
     setPanelPlanSteps(null);
-
-    // Persist "read" server-side (see issue #99) so it survives logout/login,
-    // instead of the old local-only readIds Set that reset on every remount.
-    if (email.db_id && !email.is_read) {
-      void apiFetch(`/emails/${email.db_id}/mark-read`, { method: "POST" })
-        .then(() => {
-          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
-          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
-        })
-        .catch(() => {});
-    }
+    markEmailRead(email);
   }, [queryClient]);
 
   return (
