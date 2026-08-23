@@ -587,6 +587,8 @@ function QuickAction({
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [reminding, setReminding] = useState(false);
+  const [reminderFeedback, setReminderFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const lastClickTimeRef = useRef<number>(0);
   const manuallyClosed = useRef(false);
 
@@ -606,6 +608,27 @@ function QuickAction({
     void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
     void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
     setDone(true);
+  }
+
+  async function handleCreateReminder() {
+    if (!email.db_id) {
+      setReminderFeedback({ type: "error", text: "Ce rappel ne peut pas encore être créé." });
+      return;
+    }
+    setReminding(true);
+    setReminderFeedback(null);
+    try {
+      const result = await apiFetch<{ message?: string }>(`/emails/${email.db_id}/remind`, { method: "POST" });
+      void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+      setDone(true);
+      setReminderFeedback({ type: "success", text: result.message || "Rappel créé dans vos tâches." });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Impossible de créer le rappel.";
+      setReminderFeedback({ type: "error", text });
+    } finally {
+      setReminding(false);
+    }
   }
 
   async function handleSummarize() {
@@ -859,7 +882,16 @@ function QuickAction({
     );
     if (category === "attente") return (
       <div className="flex items-center gap-1.5">
-        <button onClick={() => void handleMarkDone()} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Clock size={11}/><span>Rappel</span></button>
+        <button
+          type="button"
+          onClick={() => void handleCreateReminder()}
+          disabled={reminding || done}
+          className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] transition-all whitespace-nowrap"
+          aria-live="polite"
+        >
+          {reminding ? <span className="w-3 h-3 border border-current/30 border-t-current rounded-full animate-spin" /> : <Clock size={11}/>}<span>{done ? "Rappel créé" : reminding ? "Création…" : "Rappel"}</span>
+        </button>
+        {reminderFeedback && <span className={`text-xs font-medium ${reminderFeedback.type === "success" ? "text-green-500" : "text-destructive"}`} role="status">{reminderFeedback.text}</span>}
         {summarizeBtn}
         {replyBtn}
       </div>
