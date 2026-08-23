@@ -301,6 +301,7 @@ function EmailPanel({
         .then((r) => {
           setBody(r.body);
           void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
         })
         .catch(() => setBody(email.body || ""))
         .finally(() => setBodyLoading(false));

@@ -116,7 +116,7 @@ export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
         <motion.button
           data-tour={size === "large" ? "power-button" : "iris-toggle"}
           onClick={handleToggle}
-          disabled={toggle.isPending}
+          disabled={toggle.isPending || !state}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           animate={
