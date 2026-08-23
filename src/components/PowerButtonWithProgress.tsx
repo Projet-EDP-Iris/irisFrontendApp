@@ -17,10 +17,10 @@ const SIZE_CONFIG: Record<Size, { button: number; svg: number; radius: number; s
 const GAP_DEGREES = 46;
 
 export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { data: state } = useProcessingState();
   const toggle = useToggleProcessing();
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -46,7 +46,7 @@ export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
   function handleToggle() {
     toggle.mutate(undefined, {
       onSuccess: (result) => {
-        if (result.is_active) {
+        if (result.is_active && !(size === "small" && location === "/emails")) {
           if (timerRef.current) clearTimeout(timerRef.current);
           timerRef.current = setTimeout(() => {
             navigate("/emails");
@@ -114,9 +114,12 @@ export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
 
         {/* Power button */}
         <motion.button
+          type="button"
           data-tour={size === "large" ? "power-button" : "iris-toggle"}
           onClick={handleToggle}
           disabled={toggle.isPending || !state}
+          aria-label={isActive ? "Désactiver Iris" : "Activer Iris"}
+          aria-pressed={isActive}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           animate={

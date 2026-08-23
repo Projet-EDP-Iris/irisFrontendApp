@@ -8,6 +8,7 @@ export function useProcessingState() {
     queryFn: () => apiFetch<ProcessingState>("/processing-state"),
     refetchInterval: 2000,
     refetchIntervalInBackground: false,
+    enabled: !!localStorage.getItem("iris_token"),
   });
 }
 

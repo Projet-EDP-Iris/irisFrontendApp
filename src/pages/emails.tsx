@@ -598,13 +598,14 @@ function QuickAction({
     }
     try {
       await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
-      void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
-      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
-      setDone(true);
     } catch {
       // Don't show a false "Fait ✓" if persistence failed — leave the action
       // visible so the user can retry, instead of silently losing the click.
+      return;
     }
+    void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+    void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+    setDone(true);
   }
 
   async function handleSummarize() {
