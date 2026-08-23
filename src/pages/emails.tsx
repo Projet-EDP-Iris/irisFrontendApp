@@ -301,6 +301,7 @@ function EmailPanel({
         .then((r) => {
           setBody(r.body);
           void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
         })
         .catch(() => setBody(email.body || ""))
         .finally(() => setBodyLoading(false));
@@ -561,9 +562,24 @@ function QuickAction({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  // Seeded from server data (see issue #99) so "Fait ✓"/"RDV ajouté" correctly show
+  // right after remount (logout/login, app restart) instead of always starting blank.
+  // Excludes "info": its is_done means "read", not a UI-terminal action — seeding it
+  // here would make renderContent's generic `if (done)` banner mask the normal Info
+  // view (and its "Résumer" button) after the email has been opened once.
+  const [done, setDone] = useState(category !== "info" && (email.is_done ?? false));
+  const [confirmed, setConfirmed] = useState(email.status === "confirmed");
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
+
+  // A server refresh (e.g. another device, or a refetch completing) can update
+  // email.is_done/status while this card stays mounted — the useState initializers
+  // above only run once, so pick up later terminal-state changes here too.
+  // One-directional on purpose: only flips to true, never reverts an optimistic
+  // local true back to false while a request is still in flight.
+  useEffect(() => {
+    if (email.is_done && category !== "info") setDone(true);
+    if (email.status === "confirmed") setConfirmed(true);
+  }, [email.is_done, email.status, category]);
   const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
@@ -575,10 +591,16 @@ function QuickAction({
   const manuallyClosed = useRef(false);
 
   async function handleMarkDone() {
-    if (!email.db_id) return;
+    if (!email.db_id) {
+      // No server-side record to persist against — nothing to fail, just reflect locally.
+      setDone(true);
+      return;
+    }
     try {
       await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
     } catch {
+      // Don't show a false "Fait ✓" if persistence failed — leave the action
+      // visible so the user can retry, instead of silently losing the click.
       return;
     }
     void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
@@ -710,6 +732,10 @@ function QuickAction({
           setConfirmedSlot(res.slot ?? null);
           setConfirmed(true);
           void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          // Without this, switching tabs and back remounts QuickAction from the
+          // stale cached email (still status !== "confirmed") and the "Confirmer
+          // RDV" button reappears even though the RDV was actually confirmed.
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
         } catch (err) {
           console.error("Calendar confirm failed:", err);
           setCalError(true);
@@ -849,7 +875,12 @@ function QuickAction({
               </div>
             ) : (
               <button
-                onClick={() => { navigator.clipboard.writeText(promoCode).catch(() => {}); void handleMarkDone(); }}
+                onClick={() => {
+                  void navigator.clipboard.writeText(promoCode).then(
+                    () => void handleMarkDone(),
+                    () => {},
+                  );
+                }}
                 className="flex items-center gap-1.5 text-xs font-semibold border border-primary/40 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 active:scale-[0.98] transition-all whitespace-nowrap"
               >
                 <Tag size={11}/><span>{promoCode}</span>
@@ -931,8 +962,23 @@ export default function EmailsPage() {
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
   const [panelComposerText, setPanelComposerText] = useState<string>("");
   const [panelPlanSteps, setPanelPlanSteps] = useState<string[] | null>(null);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Persist "read" server-side (see issue #99) so it survives logout/login,
+  // instead of the old local-only readIds Set that reset on every remount.
+  // Called from every path that opens the panel (read, summary, reply, plan) —
+  // not just the plain card click, since QuickAction's buttons stop click
+  // propagation and would otherwise bypass this entirely.
+  function markEmailRead(email: EmailItem) {
+    if (email.db_id && !email.is_read) {
+      void apiFetch(`/emails/${email.db_id}/mark-read`, { method: "POST" })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+        })
+        .catch(() => {});
+    }
+  }
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
     setSelectedEmail(email);
@@ -941,6 +987,7 @@ export default function EmailsPage() {
     if (mode !== "reply" && mode !== "compose") setPanelReplyVariants(null);
     if (mode !== "compose") setPanelComposerText("");
     if (mode !== "plan") setPanelPlanSteps(null);
+    markEmailRead(email);
   }
 
   function closePanel() {
@@ -1144,8 +1191,8 @@ export default function EmailsPage() {
     setPanelReplyVariants(null);
     setPanelComposerText("");
     setPanelPlanSteps(null);
-    setReadIds((prev) => new Set(prev).add(email.message_id));
-  }, []);
+    markEmailRead(email);
+  }, [queryClient]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1268,7 +1315,7 @@ export default function EmailsPage() {
                 email={email}
                 isIrisActive={isIrisActive}
                 isSelected={selectedEmail?.message_id === email.message_id}
-                isRead={readIds.has(email.message_id)}
+                isRead={email.is_read ?? false}
                 onSelect={() => handleSelectEmail(email)}
                 onSummarize={(summary) => { setPanelSummary(summary); openPanel(email, "summary"); }}
                 onGenerateReply={(variants) => { setPanelReplyVariants(variants); openPanel(email, "reply"); }}

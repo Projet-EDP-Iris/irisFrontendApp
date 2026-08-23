@@ -117,7 +117,7 @@ export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
           type="button"
           data-tour={size === "large" ? "power-button" : "iris-toggle"}
           onClick={handleToggle}
-          disabled={toggle.isPending}
+          disabled={toggle.isPending || !state}
           aria-label={isActive ? "Désactiver Iris" : "Activer Iris"}
           aria-pressed={isActive}
           whileHover={{ scale: 1.05 }}
