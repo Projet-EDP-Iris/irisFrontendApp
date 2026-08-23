@@ -563,7 +563,10 @@ function QuickAction({
   const [open, setOpen] = useState(false);
   // Seeded from server data (see issue #99) so "Fait ✓"/"RDV ajouté" correctly show
   // right after remount (logout/login, app restart) instead of always starting blank.
-  const [done, setDone] = useState(email.is_done ?? false);
+  // Excludes "info": its is_done means "read", not a UI-terminal action — seeding it
+  // here would make renderContent's generic `if (done)` banner mask the normal Info
+  // view (and its "Résumer" button) after the email has been opened once.
+  const [done, setDone] = useState(category !== "info" && (email.is_done ?? false));
   const [confirmed, setConfirmed] = useState(email.status === "confirmed");
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
 
@@ -573,9 +576,9 @@ function QuickAction({
   // One-directional on purpose: only flips to true, never reverts an optimistic
   // local true back to false while a request is still in flight.
   useEffect(() => {
-    if (email.is_done) setDone(true);
+    if (email.is_done && category !== "info") setDone(true);
     if (email.status === "confirmed") setConfirmed(true);
-  }, [email.is_done, email.status]);
+  }, [email.is_done, email.status, category]);
   const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
@@ -870,7 +873,12 @@ function QuickAction({
               </div>
             ) : (
               <button
-                onClick={() => { navigator.clipboard.writeText(promoCode).catch(() => {}); void handleMarkDone(); }}
+                onClick={() => {
+                  void navigator.clipboard.writeText(promoCode).then(
+                    () => void handleMarkDone(),
+                    () => {},
+                  );
+                }}
                 className="flex items-center gap-1.5 text-xs font-semibold border border-primary/40 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 active:scale-[0.98] transition-all whitespace-nowrap"
               >
                 <Tag size={11}/><span>{promoCode}</span>
