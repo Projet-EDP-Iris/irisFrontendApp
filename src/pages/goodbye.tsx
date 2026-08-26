@@ -1,20 +1,40 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { motion } from "framer-motion";
+import { IrisLogo } from "@/components/IrisLogo";
+
+// Deliberately short and understated — the opposite of Home's power-orb
+// "éveil" sequence (ripple waves, rotating ring, multi-second buildup).
+// Logout should feel immediate, not ceremonial.
+const EXIT_HOLD_MS = 650;
 
 export default function GoodbyePage() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    const timeout = setTimeout(() => navigate("/"), 1700);
+    const timeout = setTimeout(() => navigate("/"), EXIT_HOLD_MS);
     return () => clearTimeout(timeout);
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-100 via-orange-200 to-orange-300">
-      <div className="text-center px-8 py-12 rounded-3xl backdrop-blur-md border border-white/50 bg-white/40 shadow-xl">
-        <h1 className="text-5xl font-bold text-orange-600 mb-3">See you soon</h1>
-        <p className="text-orange-900/75">Iris keeps your workflow warm while you are away.</p>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <motion.div
+        initial={{ opacity: 0, scale: 1.04 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="flex flex-col items-center gap-3 text-center px-10"
+      >
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 0.7, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.05, ease: "easeOut" }}
+        >
+          <IrisLogo className="w-10 h-10" />
+        </motion.div>
+        <p className="text-xs font-semibold text-primary/80 tracking-widest uppercase">
+          À bientôt
+        </p>
+      </motion.div>
     </div>
   );
 }
