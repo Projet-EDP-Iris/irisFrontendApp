@@ -17,9 +17,9 @@ const STEPS: TourStep[] = [
   {
     id: "power-button",
     page: "/home",
-    title: "Bouton Iris",
+    title: "Anneau de progression",
     description:
-      "Activez Iris en appuyant sur ce bouton. Elle analyse vos emails en continu quand elle est allumée. Appuyez à nouveau pour la mettre en veille.",
+      "L'anneau affiche en temps réel le nombre d'emails déjà traités par Iris sur le total (ex. 78/101 · 77%) — ce tri par IA tourne en continu en arrière-plan, que ce bouton soit allumé ou non. Le bouton, lui, active/désactive uniquement les actions rapides sur chaque email (confirmer, répondre, marquer comme fait…) — pas l'analyse elle-même.",
     placement: "right",
   },
   {
@@ -27,7 +27,15 @@ const STEPS: TourStep[] = [
     page: "/emails",
     title: "Contrôle rapide d'Iris",
     description:
-      "Ce mini bouton vous permet d'activer ou désactiver Iris directement depuis la page des emails, sans revenir à l'accueil.",
+      "La version miniature du bouton, accessible depuis la page des emails. Même rôle qu'à l'accueil : elle active ou verrouille les actions rapides sur chaque email — l'analyse en arrière-plan continue quoi qu'il arrive.",
+    placement: "bottom",
+  },
+  {
+    id: "progress-bar",
+    page: "/emails",
+    title: "Barre de progression globale",
+    description:
+      "Indique combien d'emails ont été traités au total sur cette boîte, tous types confondus. Chaque onglet ci-dessus a aussi sa propre petite barre, qui se met à jour (avec un léger flash) dès qu'un email de cette catégorie est marqué comme terminé.",
     placement: "bottom",
   },
   {
@@ -35,7 +43,7 @@ const STEPS: TourStep[] = [
     page: "/emails",
     title: "Catégories d'emails",
     description:
-      "Iris trie automatiquement vos emails : RDV (rendez-vous), Action (à traiter), En attente, Bons plans (promos), et Info (informatif).",
+      "Iris trie automatiquement vos emails : RDV (rendez-vous), Action (à traiter), En attente, Bons plans (promos), et Info (informatif). La petite barre sous chaque onglet montre sa progression individuelle.",
     placement: "bottom",
   },
   {
@@ -43,7 +51,7 @@ const STEPS: TourStep[] = [
     page: "/emails",
     title: "Actions rapides (⋮)",
     description:
-      "Cliquez sur les trois points oranges pour révéler les actions disponibles : confirmer un RDV, résumer, répondre, ou copier un code promo.",
+      "Cliquez sur les trois points oranges pour révéler les actions disponibles selon la catégorie : Confirmer RDV, Plan (étapes suggérées par IA pour une action), Fait, Rappel, copier un code promo, Résumer, ou Répondre.",
     placement: "right",
   },
 ];
