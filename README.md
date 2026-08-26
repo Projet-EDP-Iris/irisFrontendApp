@@ -110,6 +110,8 @@ rm -rf node_modules package-lock.json && npm install
 
 **OAuth redirect not working locally:** the backend must be running on `http://localhost:8000` and the callback URL must be registered in Google/Microsoft developer consoles.
 
+**macOS says "Apple could not verify Iris is free of malware" (or shows a similar first-launch warning):** the app is ad-hoc signed but not Apple-notarized (notarization requires a paid Apple Developer account), so macOS can't fully vouch for it yet. This is expected on first launch — go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** (or right-click the app → **Open**). You only need to do this once. If you still see the older, unrecoverable "Iris is damaged and can't be opened" dialog instead, you likely downloaded a build from before this fix — grab the latest release.
+
 ---
 
 ### Repository Rules
@@ -196,6 +198,10 @@ src/
 ├── types/          # Interfaces TypeScript partagées
 └── constants/      # Données statiques (icônes de profil)
 ```
+
+### Dépannage
+
+**macOS affiche "Apple ne peut pas vérifier qu'Iris ne contient pas de malware" (ou un avertissement similaire au premier lancement) :** l'app est signée en ad-hoc mais pas notariée par Apple (la notarisation nécessite un compte développeur Apple payant), donc macOS ne peut pas encore la garantir pleinement. C'est normal au premier lancement — allez dans **Réglages Système → Confidentialité et sécurité**, faites défiler et cliquez sur **"Ouvrir quand même"** (ou clic droit sur l'app → **Ouvrir**). Une seule fois suffit. Si vous voyez encore l'ancien message "Iris est endommagée et ne peut pas être ouverte" sans option de récupération, vous avez probablement téléchargé une version antérieure à ce correctif — prenez la dernière release.
 
 ### Règles du dépôt
 

@@ -9,4 +9,7 @@ export interface EmailItem {
   db_id?: number;
   provider?: "gmail" | "outlook" | "unknown";
   suggested_reply?: string | null;
+  is_done?: boolean; // category-specific terminal action taken (persisted)
+  is_read?: boolean; // user has opened this email (persisted)
+  status?: string | null; // e.g. "confirmed" | "dismissed" for RDV
 }

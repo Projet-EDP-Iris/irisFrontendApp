@@ -9,8 +9,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "tsc -b && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish=never",
-    "electron:release": "tsc -b && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish=always"
+    "electron:build": "tsc -b && vite build && electron-builder --publish=never",
+    "electron:release": "tsc -b && vite build && electron-builder --publish=always"
   },
   "build": {
     "appId": "com.iris.app",
@@ -28,8 +28,7 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "public/icon.icns",
-      "identity": null
+      "icon": "public/icon.icns"
     },
     "linux": {
       "target": "AppImage",
@@ -54,14 +53,14 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
-    "@radix-ui/react-accordion": "^1.2.4",
+    "@radix-ui/react-accordion": "^1.2.20",
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-aspect-ratio": "^1.1.3",
     "@radix-ui/react-avatar": "^1.1.4",
     "@radix-ui/react-checkbox": "^1.1.5",
     "@radix-ui/react-collapsible": "^1.1.4",
     "@radix-ui/react-context-menu": "^2.2.7",
-    "@radix-ui/react-dialog": "^1.1.7",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-hover-card": "^1.1.7",
     "@radix-ui/react-label": "^2.1.3",
@@ -73,13 +72,13 @@
     "@radix-ui/react-scroll-area": "^1.2.4",
     "@radix-ui/react-select": "^2.1.7",
     "@radix-ui/react-separator": "^1.1.3",
-    "@radix-ui/react-slider": "^1.2.4",
+    "@radix-ui/react-slider": "^1.4.7",
     "@radix-ui/react-slot": "^1.2.0",
     "@radix-ui/react-switch": "^1.1.4",
     "@radix-ui/react-tabs": "^1.1.4",
-    "@radix-ui/react-toast": "^1.2.7",
+    "@radix-ui/react-toast": "^1.2.23",
     "@radix-ui/react-toggle": "^1.1.3",
-    "@radix-ui/react-toggle-group": "^1.1.3",
+    "@radix-ui/react-toggle-group": "^1.1.19",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tanstack/react-query": "^5.56.2",
     "class-variance-authority": "^0.7.1",

@@ -1,39 +1,56 @@
-import { useRef, useEffect } from "react";
-import { useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { useRef } from "react";
+import type { MouseEvent } from "react";
 
-import { useAuth } from "@/context/AuthContext";
 import { IrisLogo } from "@/components/IrisLogo";
 import { APP_VERSION } from "@/lib/version";
+import { PowerButtonWithProgress } from "@/components/PowerButtonWithProgress";
+import { RippleField } from "@/components/RippleField";
+import { useProcessingState } from "@/hooks/useProcessingState";
+
+// Max drift (px) of the rotating ring toward the cursor.
+const RING_PARALLAX_RANGE = 14;
 
 export default function HomePage() {
-  const [, navigate] = useLocation();
-  const { isIrisActive, setIsIrisActive } = useAuth();
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const { data: processingState } = useProcessingState();
+  const isIrisActive = processingState?.is_active ?? false;
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  const orbRef = useRef<HTMLDivElement>(null);
+  const mouseAngleRef = useRef(0);
+  const mouseDistRef = useRef(Infinity);
 
-  const handleToggle = () => {
-    if (isIrisActive) {
-      setIsIrisActive(false);
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    } else {
-      setIsIrisActive(true);
-      timerRef.current = setTimeout(() => {
-        navigate("/emails");
-      }, 2000);
-    }
-  };
+  const ringX = useMotionValue(0);
+  const ringY = useMotionValue(0);
+  const springX = useSpring(ringX, { stiffness: 120, damping: 20 });
+  const springY = useSpring(ringY, { stiffness: 120, damping: 20 });
+  // Dashed ring is 380px — offset by half its size so `left/top:50%` plus this
+  // (plus the live parallax spring) lands it exactly centered on the orb box.
+  const dashedX = useTransform(springX, (v) => v - 190);
+  const dashedY = useTransform(springY, (v) => v - 190);
+
+  function handlePageMouseMove(e: MouseEvent<HTMLDivElement>) {
+    if (!isIrisActive || !orbRef.current) return;
+    const rect = orbRef.current.getBoundingClientRect();
+    const dx = e.clientX - (rect.left + rect.width / 2);
+    const dy = e.clientY - (rect.top + rect.height / 2);
+    mouseAngleRef.current = Math.atan2(dy, dx);
+    mouseDistRef.current = Math.hypot(dx, dy);
+    ringX.set(Math.max(-1, Math.min(1, dx * 0.04)) * RING_PARALLAX_RANGE);
+    ringY.set(Math.max(-1, Math.min(1, dy * 0.04)) * RING_PARALLAX_RANGE);
+  }
+
+  function handlePageMouseLeave() {
+    ringX.set(0);
+    ringY.set(0);
+    mouseDistRef.current = Infinity;
+  }
 
   return (
-    <div className="flex flex-col h-full items-center justify-center relative bg-background overflow-hidden">
+    <div
+      className="flex flex-col h-full items-center justify-center relative bg-background overflow-hidden"
+      onMouseMove={handlePageMouseMove}
+      onMouseLeave={handlePageMouseLeave}
+    >
       {/* Background ambience */}
       {isIrisActive && (
         <motion.div
@@ -46,8 +63,11 @@ export default function HomePage() {
         />
       )}
 
-      {/* Power orb system */}
-      <div className="relative flex items-center justify-center z-10">
+      {/* Power orb system — fixed to the gauge's own 340x340 footprint, no flex
+          centering (the button's own caption below would otherwise stretch the
+          flex cross-size and throw off every decorative layer's center). Each
+          decorative layer instead centers itself explicitly via left/top:50%. */}
+      <div ref={orbRef} className="relative z-10" style={{ width: 340, height: 340 }}>
         {/* Pulsing outer glow */}
         <motion.div
           animate={{
@@ -57,6 +77,10 @@ export default function HomePage() {
           transition={{ duration: 0.7, ease: "easeOut" }}
           className="absolute rounded-full"
           style={{
+            left: "50%",
+            top: "50%",
+            x: -240,
+            y: -240,
             width: "480px",
             height: "480px",
             background: "radial-gradient(circle, rgba(249,115,22,0.4) 0%, transparent 75%)",
@@ -65,29 +89,11 @@ export default function HomePage() {
           }}
         />
 
-        {/* Energy ripple waves */}
+        {/* Energy ripple waves — sit clearly outside the gauge (button+gauge stay
+            centered inside the innermost ripple, not touching it), expand to cover
+            most of the page, and dent/undulate toward the cursor. */}
         {isIrisActive && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: [1, 2.2], opacity: [0.5, 0] }}
-                transition={{
-                  duration: 2.5,
-                  repeat: Infinity,
-                  delay: i * 0.8,
-                  ease: "easeOut",
-                }}
-                className="absolute rounded-full border border-primary/30"
-                style={{
-                  width: "280px",
-                  height: "280px",
-                  boxShadow: "0 0 20px rgba(249,115,22,0.1)",
-                }}
-              />
-            ))}
-          </div>
+          <RippleField active={isIrisActive} mouseAngleRef={mouseAngleRef} mouseDistRef={mouseDistRef} />
         )}
 
         {/* Rotating energy ring */}
@@ -101,46 +107,20 @@ export default function HomePage() {
             }}
             className="absolute rounded-full border-2 border-dashed pointer-events-none"
             style={{
-              width: "280px",
-              height: "280px",
+              left: "50%",
+              top: "50%",
+              width: "380px",
+              height: "380px",
               borderColor: "rgba(249,115,22,0.5)",
               boxShadow: "0 0 30px rgba(249,115,22,0.3)",
+              x: dashedX,
+              y: dashedY,
             }}
           />
         )}
 
-        {/* Power button */}
-        <motion.button
-          data-tour="power-button"
-          onClick={handleToggle}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          animate={{
-            boxShadow: isIrisActive
-              ? "0 0 80px rgba(249,115,22,0.9), inset 0 0 20px rgba(255,255,255,0.3)"
-              : "0 0 30px rgba(184,76,40,0.4)",
-            backgroundColor: isIrisActive ? "#f97316" : "#b84c28",
-          }}
-          className="relative w-48 h-48 rounded-full flex items-center justify-center transition-colors duration-500 shadow-2xl"
-          style={{
-            background: isIrisActive
-              ? "radial-gradient(circle, #f97316 0%, #ea580c 100%)"
-              : "linear-gradient(135deg, #b84c28 0%, #8a3518 100%)",
-          }}
-        >
-          <motion.div
-            animate={{
-              rotate: isIrisActive ? 360 : 0,
-              scale: isIrisActive ? 1.2 : 1,
-            }}
-            transition={{ type: "spring", stiffness: 200 }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-14 h-14">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" strokeLinecap="round" />
-              <line x1="12" y1="2" x2="12" y2="12" strokeLinecap="round" />
-            </svg>
-          </motion.div>
-        </motion.button>
+        {/* Power button with progress ring */}
+        <PowerButtonWithProgress size="large" poll={false} />
       </div>
 
       {/* Animated caption */}
@@ -149,7 +129,7 @@ export default function HomePage() {
           opacity: isIrisActive ? 1 : 0.8,
           y: isIrisActive ? 5 : 0,
         }}
-        className="mt-12 text-sm text-primary/80 font-semibold tracking-wide uppercase"
+        className="mt-28 text-sm text-primary/80 font-semibold tracking-wide uppercase"
         style={
           isIrisActive
             ? {
@@ -173,7 +153,7 @@ export default function HomePage() {
               }}
               style={{ display: "inline-block" }}
             >
-              {char === " " ? "\u00A0" : char}
+              {char === " " ? " " : char}
             </motion.span>
           ))}
       </motion.p>
