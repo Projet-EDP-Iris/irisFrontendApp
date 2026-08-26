@@ -1242,7 +1242,7 @@ export default function EmailsPage() {
           </p>
         </div>
 
-        <PowerButtonWithProgress size="small" />
+        <PowerButtonWithProgress size="small" poll={false} />
       </div>
       {statusMsg && (
         <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
@@ -1287,7 +1287,7 @@ export default function EmailsPage() {
           );
         })}
       </div>
-      <EmailsProgressBar />
+      <EmailsProgressBar poll={false} />
       <div className="flex flex-1 overflow-hidden">
 
         {/* Email list */}

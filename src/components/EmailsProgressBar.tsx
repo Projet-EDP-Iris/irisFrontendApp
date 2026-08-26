@@ -3,8 +3,8 @@ import { useProcessingState } from "@/hooks/useProcessingState";
 // Sticky offset matches the tab row's rendered height (px-6 py-2.5 text-xs buttons + border-b ≈ 40px).
 const TAB_ROW_HEIGHT = 40;
 
-export function EmailsProgressBar() {
-  const { data: state } = useProcessingState();
+export function EmailsProgressBar({ poll = true }: { poll?: boolean } = {}) {
+  const { data: state } = useProcessingState(poll);
 
   const isActive = state?.is_active ?? false;
   const total = state?.total_emails ?? 0;
