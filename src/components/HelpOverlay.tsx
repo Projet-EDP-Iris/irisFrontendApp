@@ -11,7 +11,13 @@ const HOME_ITEMS: HelpItem[] = [
     icon: "⏻",
     title: "Bouton Iris",
     description:
-      "Le bouton principal d'Iris. Appuyez pour l'activer — Iris commence alors à analyser vos emails en continu. Appuyez à nouveau pour la mettre en veille.",
+      "Le bouton principal d'Iris. Il n'active pas l'analyse des emails — celle-ci tourne automatiquement en arrière-plan, en continu. Il active ou verrouille les actions rapides sur chaque email (confirmer, résumer, répondre, marquer comme fait…).",
+  },
+  {
+    icon: "◔",
+    title: "Anneau de progression",
+    description:
+      "Affiche en temps réel le nombre d'emails déjà traités par le tri IA sur le total (ex. 78/101 · 77%), indépendamment de l'état du bouton Iris.",
   },
 ];
 
@@ -20,7 +26,13 @@ const EMAIL_ITEMS: HelpItem[] = [
     icon: "⋮",
     title: "Actions rapides (⋮)",
     description:
-      "Cliquez sur les trois points oranges d'un email pour révéler les actions disponibles : confirmer un rendez-vous, résumer, répondre, ou copier un code promo.",
+      "Cliquez sur les trois points oranges d'un email pour révéler les actions disponibles selon sa catégorie : confirmer un rendez-vous, générer un Plan, marquer comme fait, ajouter un rappel, copier un code promo, résumer ou répondre.",
+  },
+  {
+    icon: "▬",
+    title: "Barres de progression",
+    description:
+      "Une barre globale sous les onglets, et une petite barre par catégorie (sous chaque onglet) — chacune indique la part d'emails déjà traités et flashe brièvement dès qu'un nouvel email de cette catégorie est terminé.",
   },
   {
     icon: "📅",
@@ -32,7 +44,7 @@ const EMAIL_ITEMS: HelpItem[] = [
     icon: "⚡",
     title: "Action",
     description:
-      "Emails nécessitant une action de votre part (signature, paiement, formulaire…). Iris les a identifiés comme urgents ou actionnables.",
+      "Emails nécessitant une action de votre part (signature, paiement, formulaire…). Utilisez le bouton Plan pour obtenir des étapes suggérées par IA, ou Fait une fois traité.",
   },
   {
     icon: "⏳",

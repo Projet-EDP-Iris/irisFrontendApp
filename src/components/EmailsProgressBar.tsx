@@ -13,6 +13,7 @@ export function EmailsProgressBar({ poll = true }: { poll?: boolean } = {}) {
 
   return (
     <div
+      data-tour="progress-bar"
       className="px-6 py-2 flex-shrink-0 border-b border-border/30 bg-background"
       style={{ position: "sticky", top: TAB_ROW_HEIGHT, zIndex: 10 }}
     >
