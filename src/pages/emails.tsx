@@ -2,16 +2,20 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { playDotsClick } from "@/lib/sounds";
 import {
-  Mail, Calendar, CheckCircle2, Plug, Zap, Clock, Tag,
-  X, ArrowLeft, FileText, MessageSquare,
+  Mail, Calendar, CheckCircle2, Plug, Clock, Tag,
+  X, ArrowLeft, FileText, MessageSquare, ListChecks,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
+import { useProcessingState } from "@/hooks/useProcessingState";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
+import { PowerButtonWithProgress } from "@/components/PowerButtonWithProgress";
+import { CategoryProgressBar } from "@/components/CategoryProgressBar";
+import { EmailsProgressBar } from "@/components/EmailsProgressBar";
 import type { EmailItem } from "@/types/email";
 
 
@@ -86,7 +90,7 @@ function cardClass(provider?: string) {
 // Shared types
 
 type ReplyVariant = { label: string; content: string };
-type PanelMode = "read" | "summary" | "reply" | "compose";
+type PanelMode = "read" | "summary" | "reply" | "compose" | "plan";
 
 // Reply variants display (used inside EmailPanel in reply mode)
 
@@ -261,6 +265,7 @@ function EmailPanel({
   summary = null,
   replyVariants = null,
   composerText = "",
+  planSteps = null,
   onSelectVariant,
   onModeChange,
 }: {
@@ -270,12 +275,14 @@ function EmailPanel({
   summary?: string | null;
   replyVariants?: ReplyVariant[] | null;
   composerText?: string;
+  planSteps?: string[] | null;
   onSelectVariant?: (text: string) => void;
   onModeChange?: (mode: PanelMode) => void;
 }) {
   const [body, setBody] = useState<string | null>(null);
   const [bodyLoading, setBodyLoading] = useState(false);
   const [showingOriginal, setShowingOriginal] = useState(false);
+  const queryClient = useQueryClient();
 
   const category = email.category ?? "info";
   const dateStr = fmtDate(email.date, true);
@@ -284,18 +291,24 @@ function EmailPanel({
   useEffect(() => { setShowingOriginal(false); }, [mode, email.message_id]);
 
   // For Gmail: fetch full body on open. Outlook already has full body.
+  // This also marks the email is_done server-side (e.g. Info category "read" signal),
+  // so refresh processing-state to reflect it promptly.
   useEffect(() => {
     if (!email.message_id) { setBody(email.body || ""); return; }
     if (email.provider === "gmail") {
       setBodyLoading(true);
       apiFetch<{ body: string }>(`/emails/body/${email.message_id}?provider=gmail`)
-        .then((r) => setBody(r.body))
+        .then((r) => {
+          setBody(r.body);
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+        })
         .catch(() => setBody(email.body || ""))
         .finally(() => setBodyLoading(false));
     } else {
       setBody(email.body || "");
     }
-  }, [email.message_id, email.provider, email.body]);
+  }, [email.message_id, email.provider, email.body, queryClient]);
 
   const providerLabel = email.provider === "gmail" ? "Gmail" : email.provider === "outlook" ? "Outlook" : null;
   const accentColor = email.provider === "outlook" ? "#0078D4" : email.provider === "gmail" ? "#4285F4" : "#E8842A";
@@ -346,6 +359,21 @@ function EmailPanel({
       );
     }
 
+    if (mode === "plan") {
+      return (
+        <div className="p-3 rounded-xl bg-muted/30 border border-border/40">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Plan · IA
+          </p>
+          <ol className="flex flex-col gap-1.5 list-decimal list-inside text-sm text-foreground/85 leading-relaxed">
+            {(planSteps ?? []).map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      );
+    }
+
     if (mode === "reply") {
       return (
         <ReplyVariantsView
@@ -380,7 +408,7 @@ function EmailPanel({
   }
 
   // Mode label shown in the panel header
-  const modeLabel = mode === "summary" ? "Résumé" : mode === "reply" ? "Réponses suggérées" : mode === "compose" ? "Rédiger la réponse" : null;
+  const modeLabel = mode === "summary" ? "Résumé" : mode === "reply" ? "Réponses suggérées" : mode === "compose" ? "Rédiger la réponse" : mode === "plan" ? "Plan" : null;
 
   return (
     <div className="flex flex-col h-full border-l border-border/40 bg-card overflow-hidden">
@@ -436,6 +464,7 @@ function EmailCard({
   onSelect,
   onSummarize,
   onGenerateReply,
+  onGeneratePlan,
 }: {
   email: EmailItem;
   isIrisActive: boolean;
@@ -444,6 +473,7 @@ function EmailCard({
   onSelect: () => void;
   onSummarize?: (summary: string) => void;
   onGenerateReply?: (variants: ReplyVariant[]) => void;
+  onGeneratePlan?: (steps: string[]) => void;
 }) {
   const category = email.category ?? "info";
   const subject = email.subject || "(Sans objet)";
@@ -503,6 +533,7 @@ function EmailCard({
           category={category}
           onSummarize={onSummarize}
           onGenerateReply={onGenerateReply}
+          onGeneratePlan={onGeneratePlan}
         />
       </div>
     </div>
@@ -520,25 +551,85 @@ function QuickAction({
   category,
   onSummarize,
   onGenerateReply,
+  onGeneratePlan,
 }: {
   email: EmailItem;
   category: string;
   onSummarize?: (summary: string) => void;
   onGenerateReply?: (variants: ReplyVariant[]) => void;
+  onGeneratePlan?: (steps: string[]) => void;
 }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  // Seeded from server data (see issue #99) so "Fait ✓"/"RDV ajouté" correctly show
+  // right after remount (logout/login, app restart) instead of always starting blank.
+  // Excludes "info": its is_done means "read", not a UI-terminal action — seeding it
+  // here would make renderContent's generic `if (done)` banner mask the normal Info
+  // view (and its "Résumer" button) after the email has been opened once.
+  const [done, setDone] = useState(category !== "info" && (email.is_done ?? false));
+  const [confirmed, setConfirmed] = useState(email.status === "confirmed");
   const [confirmedSlot, setConfirmedSlot] = useState<{ start_time: string } | null>(null);
+
+  // A server refresh (e.g. another device, or a refetch completing) can update
+  // email.is_done/status while this card stays mounted — the useState initializers
+  // above only run once, so pick up later terminal-state changes here too.
+  // One-directional on purpose: only flips to true, never reverts an optimistic
+  // local true back to false while a request is still in flight.
+  useEffect(() => {
+    if (email.is_done && category !== "info") setDone(true);
+    if (email.status === "confirmed") setConfirmed(true);
+  }, [email.is_done, email.status, category]);
   const [calProviderErrors, setCalProviderErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [calError, setCalError] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [reminding, setReminding] = useState(false);
+  const [reminderFeedback, setReminderFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const lastClickTimeRef = useRef<number>(0);
   const manuallyClosed = useRef(false);
+
+  async function handleMarkDone() {
+    if (!email.db_id) {
+      // No server-side record to persist against — nothing to fail, just reflect locally.
+      setDone(true);
+      return;
+    }
+    try {
+      await apiFetch(`/emails/${email.db_id}/mark-done`, { method: "POST" });
+    } catch {
+      // Don't show a false "Fait ✓" if persistence failed — leave the action
+      // visible so the user can retry, instead of silently losing the click.
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+    void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+    setDone(true);
+  }
+
+  async function handleCreateReminder() {
+    if (!email.db_id) {
+      setReminderFeedback({ type: "error", text: "Ce rappel ne peut pas encore être créé." });
+      return;
+    }
+    setReminding(true);
+    setReminderFeedback(null);
+    try {
+      const result = await apiFetch<{ message?: string }>(`/emails/${email.db_id}/remind`, { method: "POST" });
+      void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+      setDone(true);
+      setReminderFeedback({ type: "success", text: result.message || "Rappel créé dans vos tâches." });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Impossible de créer le rappel.";
+      setReminderFeedback({ type: "error", text });
+    } finally {
+      setReminding(false);
+    }
+  }
 
   async function handleSummarize() {
     if (!onSummarize) return;
@@ -574,6 +665,23 @@ function QuickAction({
     }
   }
 
+  async function handleGeneratePlan() {
+    if (!onGeneratePlan) return;
+    setPlanning(true);
+    try {
+      const res = await apiFetch<{ steps: string[] }>("/emails/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: email.subject ?? "", body: email.body ?? "" }),
+      });
+      onGeneratePlan(res.steps?.length ? res.steps : ["Aucune étape suggérée."]);
+    } catch {
+      onGeneratePlan(["Erreur lors de la génération du plan."]);
+    } finally {
+      setPlanning(false);
+    }
+  }
+
   // Keep action visible once completed, unless the user explicitly closed it
   useEffect(() => {
     if ((done || confirmed) && !manuallyClosed.current) setOpen(true);
@@ -592,7 +700,7 @@ function QuickAction({
         : null;
       return (
         <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5 text-green-400 text-xs font-semibold whitespace-nowrap">
+          <div className="flex items-center gap-1.5 text-primary text-xs font-semibold whitespace-nowrap">
             <CheckCircle2 size={13} />
             <span>RDV ajouté{dateLabel ? ` · ${dateLabel}` : ""}</span>
           </div>
@@ -646,6 +754,11 @@ function QuickAction({
           setCalProviderErrors(failed);
           setConfirmedSlot(res.slot ?? null);
           setConfirmed(true);
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+          // Without this, switching tabs and back remounts QuickAction from the
+          // stale cached email (still status !== "confirmed") and the "Confirmer
+          // RDV" button reappears even though the RDV was actually confirmed.
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
         } catch (err) {
           console.error("Calendar confirm failed:", err);
           setCalError(true);
@@ -748,14 +861,37 @@ function QuickAction({
 
     if (category === "action") return (
       <div className="flex items-center gap-1.5">
-        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all whitespace-nowrap" style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}><Zap size={11}/><span>Traiter</span></button>
+        <button
+          onClick={() => void handleGeneratePlan()}
+          disabled={planning}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white px-2.5 py-1.5 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+          style={{ background: "linear-gradient(135deg,#E8842A,#d4751f)" }}
+        >
+          {planning ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> : <ListChecks size={11}/>}
+          <span>Plan</span>
+        </button>
+        <button
+          onClick={() => void handleMarkDone()}
+          className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"
+        >
+          <CheckCircle2 size={11}/><span>Fait</span>
+        </button>
         {summarizeBtn}
         {replyBtn}
       </div>
     );
     if (category === "attente") return (
       <div className="flex items-center gap-1.5">
-        <button onClick={() => setDone(true)} className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] transition-all whitespace-nowrap"><Clock size={11}/><span>Rappel</span></button>
+        <button
+          type="button"
+          onClick={() => void handleCreateReminder()}
+          disabled={reminding || done}
+          className="flex items-center gap-1.5 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] transition-all whitespace-nowrap"
+          aria-live="polite"
+        >
+          {reminding ? <span className="w-3 h-3 border border-current/30 border-t-current rounded-full animate-spin" /> : <Clock size={11}/>}<span>{done ? "Rappel créé" : reminding ? "Création…" : "Rappel"}</span>
+        </button>
+        {reminderFeedback && <span className={`text-xs font-medium ${reminderFeedback.type === "success" ? "text-green-500" : "text-destructive"}`} role="status">{reminderFeedback.text}</span>}
         {summarizeBtn}
         {replyBtn}
       </div>
@@ -771,7 +907,12 @@ function QuickAction({
               </div>
             ) : (
               <button
-                onClick={() => { navigator.clipboard.writeText(promoCode).catch(() => {}); setDone(true); }}
+                onClick={() => {
+                  void navigator.clipboard.writeText(promoCode).then(
+                    () => void handleMarkDone(),
+                    () => {},
+                  );
+                }}
                 className="flex items-center gap-1.5 text-xs font-semibold border border-primary/40 bg-primary/10 text-primary px-2.5 py-1.5 rounded-lg hover:bg-primary/20 active:scale-[0.98] transition-all whitespace-nowrap"
               >
                 <Tag size={11}/><span>{promoCode}</span>
@@ -852,8 +993,24 @@ export default function EmailsPage() {
   const [panelSummary, setPanelSummary] = useState<string | null>(null);
   const [panelReplyVariants, setPanelReplyVariants] = useState<ReplyVariant[] | null>(null);
   const [panelComposerText, setPanelComposerText] = useState<string>("");
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [panelPlanSteps, setPanelPlanSteps] = useState<string[] | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Persist "read" server-side (see issue #99) so it survives logout/login,
+  // instead of the old local-only readIds Set that reset on every remount.
+  // Called from every path that opens the panel (read, summary, reply, plan) —
+  // not just the plain card click, since QuickAction's buttons stop click
+  // propagation and would otherwise bypass this entirely.
+  function markEmailRead(email: EmailItem) {
+    if (email.db_id && !email.is_read) {
+      void apiFetch(`/emails/${email.db_id}/mark-read`, { method: "POST" })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+          void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+        })
+        .catch(() => {});
+    }
+  }
 
   function openPanel(email: EmailItem, mode: PanelMode = "read") {
     setSelectedEmail(email);
@@ -861,6 +1018,8 @@ export default function EmailsPage() {
     if (mode !== "summary") setPanelSummary(null);
     if (mode !== "reply" && mode !== "compose") setPanelReplyVariants(null);
     if (mode !== "compose") setPanelComposerText("");
+    if (mode !== "plan") setPanelPlanSteps(null);
+    markEmailRead(email);
   }
 
   function closePanel() {
@@ -869,9 +1028,38 @@ export default function EmailsPage() {
     setPanelSummary(null);
     setPanelReplyVariants(null);
     setPanelComposerText("");
+    setPanelPlanSteps(null);
   }
 
-  const { isIrisActive, setIsIrisActive, setEmailCount } = useAuth();
+  const { setEmailCount } = useAuth();
+  const { data: processingState } = useProcessingState();
+  const isIrisActive = processingState?.is_active ?? false;
+
+  // Flash a tab pill whenever its category's "done" count increases (RDV confirm,
+  // Action "Fait", En attente "Rappel", Bons plans copy, Info auto-read).
+  const [pulsingTabs, setPulsingTabs] = useState<Set<string>>(new Set());
+  const prevCategoryDoneRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const byCategory = processingState?.processed_by_category;
+    if (!byCategory) return;
+    const increased: string[] = [];
+    for (const t of TABS) {
+      const done = byCategory[t.id]?.done ?? 0;
+      const prev = prevCategoryDoneRef.current[t.id];
+      if (prev !== undefined && done > prev) increased.push(t.id);
+      prevCategoryDoneRef.current[t.id] = done;
+    }
+    if (increased.length === 0) return;
+    setPulsingTabs((prev) => new Set([...prev, ...increased]));
+    const timer = setTimeout(() => {
+      setPulsingTabs((prev) => {
+        const next = new Set(prev);
+        for (const id of increased) next.delete(id);
+        return next;
+      });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [processingState?.processed_by_category]);
 
   const { connected: gmailConnected, enabled: gmailEnabled, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
   const { connected: outlookConnected, isLoading: outlookStatusLoading, refetchStatus: refetchOutlook } = useOutlookConnection();
@@ -1034,8 +1222,9 @@ export default function EmailsPage() {
     setPanelSummary(null);
     setPanelReplyVariants(null);
     setPanelComposerText("");
-    setReadIds((prev) => new Set(prev).add(email.message_id));
-  }, []);
+    setPanelPlanSteps(null);
+    markEmailRead(email);
+  }, [queryClient]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1053,34 +1242,7 @@ export default function EmailsPage() {
           </p>
         </div>
 
-        <motion.button
-          data-tour="iris-toggle"
-          onClick={() => setIsIrisActive(!isIrisActive)}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.92 }}
-          animate={{
-            boxShadow: isIrisActive
-              ? "0 0 18px rgba(249,115,22,0.8), inset 0 0 6px rgba(255,255,255,0.2)"
-              : "0 0 8px rgba(184,76,40,0.3)",
-          }}
-          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-          style={{
-            background: isIrisActive
-              ? "radial-gradient(circle, #f97316 0%, #ea580c 100%)"
-              : "linear-gradient(135deg, #b84c28 0%, #8a3518 100%)",
-          }}
-          title={isIrisActive ? "Iris est active" : "Iris est en sommeil"}
-        >
-          <motion.div
-            animate={{ rotate: isIrisActive ? 360 : 0, scale: isIrisActive ? 1.15 : 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" className="w-5 h-5">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" strokeLinecap="round" />
-              <line x1="12" y1="2" x2="12" y2="12" strokeLinecap="round" />
-            </svg>
-          </motion.div>
-        </motion.button>
+        <PowerButtonWithProgress size="small" />
       </div>
       {statusMsg && (
         <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
@@ -1089,22 +1251,43 @@ export default function EmailsPage() {
         </div>
       )}
       <div data-tour="email-tabs" className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "hsl(var(--border))" }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium cursor-pointer transition-all border-b-2 -mb-px whitespace-nowrap"
-            style={{ color: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
-          >
-            {t.label}
-            {tabCounts[t.id] > 0 && (
-              <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.1)", color: activeTab === t.id ? "white" : "hsl(var(--foreground) / 0.5)" }}>
-                {tabCounts[t.id]}
+        {TABS.map((t) => {
+          const catProgress = processingState?.processed_by_category?.[t.id] ?? { total: 0, done: 0 };
+          const pulsing = pulsingTabs.has(t.id);
+          return (
+            <motion.button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              animate={
+                pulsing
+                  ? {
+                      scale: [1, 1.06, 1],
+                      boxShadow: [
+                        "0 0 0px rgba(249,115,22,0)",
+                        "0 0 20px rgba(249,115,22,0.85)",
+                        "0 0 0px rgba(249,115,22,0)",
+                      ],
+                    }
+                  : { scale: 1, boxShadow: "0 0 0px rgba(249,115,22,0)" }
+              }
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="flex flex-col gap-1 px-3 pt-2.5 pb-2 text-xs font-medium cursor-pointer transition-all border-b-2 -mb-px whitespace-nowrap rounded-t-lg"
+              style={{ color: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.4)", borderColor: activeTab === t.id ? "#E8842A" : "transparent", background: "transparent" }}
+            >
+              <span className="flex items-center gap-1.5">
+                {t.label}
+                {tabCounts[t.id] > 0 && (
+                  <span className="px-1.5 py-px rounded-full text-[10px] font-bold tabular-nums" style={{ background: activeTab === t.id ? "#E8842A" : "hsl(var(--foreground) / 0.1)", color: activeTab === t.id ? "white" : "hsl(var(--foreground) / 0.5)" }}>
+                    {tabCounts[t.id]}
+                  </span>
+                )}
               </span>
-            )}
-          </button>
-        ))}
+              <CategoryProgressBar done={catProgress.done} total={catProgress.total} isActive={isIrisActive} />
+            </motion.button>
+          );
+        })}
       </div>
+      <EmailsProgressBar />
       <div className="flex flex-1 overflow-hidden">
 
         {/* Email list */}
@@ -1164,10 +1347,11 @@ export default function EmailsPage() {
                 email={email}
                 isIrisActive={isIrisActive}
                 isSelected={selectedEmail?.message_id === email.message_id}
-                isRead={readIds.has(email.message_id)}
+                isRead={email.is_read ?? false}
                 onSelect={() => handleSelectEmail(email)}
                 onSummarize={(summary) => { setPanelSummary(summary); openPanel(email, "summary"); }}
                 onGenerateReply={(variants) => { setPanelReplyVariants(variants); openPanel(email, "reply"); }}
+                onGeneratePlan={(steps) => { setPanelPlanSteps(steps); openPanel(email, "plan"); }}
               />
             ))}
 
@@ -1223,6 +1407,7 @@ export default function EmailsPage() {
               summary={panelSummary}
               replyVariants={panelReplyVariants}
               composerText={panelComposerText}
+              planSteps={panelPlanSteps}
               onSelectVariant={(text) => { setPanelComposerText(text); }}
               onModeChange={(m) => setPanelMode(m)}
             />

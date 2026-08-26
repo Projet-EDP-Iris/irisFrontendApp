@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,9 +43,13 @@ jobs:
         run: npm run build
 
       - name: Build Electron package
+        # No CSC_IDENTITY_AUTO_DISCOVERY=false here on purpose: without a real
+        # certificate configured, electron-builder falls back to a free ad-hoc
+        # signature on macOS, which moves Gatekeeper's response from a hard
+        # "app is damaged" block to a recoverable "unidentified developer"
+        # warning (see issue #59). Full notarization still requires a paid
+        # Apple Developer ID and isn't set up here.
         run: npx electron-builder ${{ matrix.build_args }} --publish=never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: List release output
         shell: bash
