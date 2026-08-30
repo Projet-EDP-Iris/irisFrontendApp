@@ -2,7 +2,7 @@
 
 Iris is an AI-powered Electron desktop app that reads your emails, detects appointments, sorts messages into smart categories, and lets you act on them directly — confirm a meeting, summarize a thread, or copy a promo code in one click.
 
-> **Backend repo:** [irisBackend](https://github.com/Jerobel05/irisBackend) — FastAPI + Python NLP pipeline
+> **Backend repo:** [irisBackend](https://github.com/Projet-EDP-Iris/irisBackend) — FastAPI + Python NLP pipeline
 
 ---
 
@@ -32,8 +32,8 @@ A [.env.example](.env.example) reference file is included. Vite switches between
 ### Install & Run
 
 ```bash
-git clone https://github.com/Jerobel05/iris-app
-cd iris-app
+git clone https://github.com/Projet-EDP-Iris/irisFrontendApp
+cd irisFrontendApp
 npm install
 
 # Web dev mode (browser)
@@ -50,8 +50,8 @@ npm run build           # web only
 npm run electron:build  # desktop installer → /release
 ```
 
-> Mac → `.dmg` · Windows → `.exe` · Linux → `.AppImage`
-> For cross-platform builds use the GitHub Actions release workflow.
+> Mac → `.dmg` · Windows → `.exe`
+> The GitHub Actions release workflow builds macOS and Windows installers. Linux (`.AppImage`) is configured in `electron-builder` but not currently built by CI — build it locally with `npm run electron:build` on a Linux machine if needed.
 
 ### Project Structure
 
@@ -121,27 +121,30 @@ rm -rf node_modules package-lock.json && npm install
 | Branch | Purpose | Direct commits |
 |---|---|---|
 | `main` | Production — stable released code | Blocked |
-| `develop` | Integration — ongoing work | Blocked |
+| `develop` | Not currently used (see below) | Blocked |
 | `feat/*` | New features | Allowed |
 | `fix/*` | Bug fixes | Allowed |
 | `chore/*` | Maintenance | Allowed |
 
-All changes to `main` and `develop` must go through a **pull request**.
+All changes to `main` must go through a **pull request**. A `develop` integration branch exists but is not part of the actual workflow — every merge lands directly on `main` via a feature/fix/chore branch.
 
 #### Workflow
 
-1. Branch off `develop`: `git checkout -b feat/your-feature develop`
+1. Branch off `main`: `git checkout -b feat/your-feature main`
 2. Commit and push
-3. Open a PR to `develop`
-4. Once stable, merge `develop` → `main`
+3. Open a PR targeting **`main`**
+4. CI (see below) must pass, then merge
 
 #### Automated Workflows
 
 | Workflow | Trigger | Action |
 |---|---|---|
-| **Auto Tag** | Push to `main` | Increments version tag (`v1.0.x`) |
-| **Release** | New version tag | Builds `.dmg` + `.exe` on GitHub runners, publishes GitHub Release |
+| **CI** | PR / push to `main` | `npm run build` (type-check + Vite build) |
+| **Auto Tag** | Push to `main` | Increments the patch version tag (`vX.Y.Z` → `vX.Y.Z+1`) |
+| **Release** | New version tag | Builds `.dmg` + `.exe` on GitHub runners, aligns the packaged `package.json` version to the tag, publishes a GitHub Release |
 | **Dependabot** | Weekly | Opens PRs for npm + Actions updates |
+
+**Versioning:** the git tag is the source of truth for each release — it's what `release.yml` uses to stamp the version into the built app. The committed `package.json` `version` field is a manually-maintained development baseline (not bumped on every tag) and gets aligned to the exact release tag only inside the CI build step, never pushed back to the repo.
 
 ---
 
@@ -171,8 +174,8 @@ Un fichier [.env.example](.env.example) de référence est inclus dans le dépô
 ### Installation & Démarrage
 
 ```bash
-git clone https://github.com/Jerobel05/iris-app
-cd iris-app
+git clone https://github.com/Projet-EDP-Iris/irisFrontendApp
+cd irisFrontendApp
 npm install
 
 npm run dev             # mode web → http://localhost:5173
@@ -210,14 +213,20 @@ src/
 | Branche | Rôle | Commits directs |
 |---|---|---|
 | `main` | Production — code stable et publié | Bloqués |
-| `develop` | Intégration — travail en cours | Bloqués |
+| `develop` | Non utilisée actuellement (voir ci-dessous) | Bloqués |
 | `feat/*` | Nouvelles fonctionnalités | Autorisés |
 | `fix/*` | Corrections | Autorisés |
+| `chore/*` | Maintenance | Autorisés |
+
+Toute modification de `main` doit passer par une **pull request**. Une branche d'intégration `develop` existe mais ne fait pas partie du workflow réel — tout est mergé directement sur `main` via une branche feature/fix/chore.
 
 #### Workflows automatiques
 
 | Workflow | Déclencheur | Action |
 |---|---|---|
-| **Auto Tag** | Push sur `main` | Incrémente le tag de version |
-| **Release** | Nouveau tag | Compile `.dmg` + `.exe`, publie une GitHub Release |
+| **CI** | PR / push sur `main` | `npm run build` (vérification des types + build Vite) |
+| **Auto Tag** | Push sur `main` | Incrémente le patch du tag de version |
+| **Release** | Nouveau tag | Compile `.dmg` + `.exe`, aligne la version de `package.json` embarquée sur le tag, publie une GitHub Release |
 | **Dependabot** | Hebdomadaire | PRs de mise à jour npm et Actions |
+
+**Versioning :** le tag git fait foi pour chaque release — c'est lui qui est utilisé par `release.yml` pour fixer la version de l'app compilée. Le champ `version` de `package.json` committé est une base de développement maintenue manuellement (pas incrémentée à chaque tag), alignée sur le tag exact uniquement pendant l'étape de build CI, jamais repoussée sur le dépôt.

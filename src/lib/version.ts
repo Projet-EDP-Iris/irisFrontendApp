@@ -1,1 +1,3 @@
-export const APP_VERSION = "Beta v0.1.0";
+import pkg from "../../package.json";
+
+export const APP_VERSION = `v${pkg.version}`;
