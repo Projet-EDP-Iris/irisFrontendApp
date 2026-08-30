@@ -7,6 +7,7 @@ import { APP_VERSION } from "@/lib/version";
 import { PowerButtonWithProgress } from "@/components/PowerButtonWithProgress";
 import { RippleField } from "@/components/RippleField";
 import { useProcessingState } from "@/hooks/useProcessingState";
+import { useAccessibility } from "@/context/AccessibilityContext";
 
 // Max drift (px) of the rotating ring toward the cursor.
 const RING_PARALLAX_RANGE = 14;
@@ -14,6 +15,7 @@ const RING_PARALLAX_RANGE = 14;
 export default function HomePage() {
   const { data: processingState } = useProcessingState();
   const isIrisActive = processingState?.is_active ?? false;
+  const { reduceMotion } = useAccessibility();
 
   const orbRef = useRef<HTMLDivElement>(null);
   const mouseAngleRef = useRef(0);
@@ -92,17 +94,17 @@ export default function HomePage() {
         {/* Energy ripple waves — sit clearly outside the gauge (button+gauge stay
             centered inside the innermost ripple, not touching it), expand to cover
             most of the page, and dent/undulate toward the cursor. */}
-        {isIrisActive && (
+        {isIrisActive && !reduceMotion && (
           <RippleField active={isIrisActive} mouseAngleRef={mouseAngleRef} mouseDistRef={mouseDistRef} />
         )}
 
-        {/* Rotating energy ring */}
+        {/* Rotating energy ring — static (no spin) when reduced motion is preferred */}
         {isIrisActive && (
           <motion.div
             initial={{ rotate: 0, opacity: 0, scale: 0.8 }}
-            animate={{ rotate: 360, opacity: 1, scale: 1 }}
+            animate={{ rotate: reduceMotion ? 0 : 360, opacity: 1, scale: 1 }}
             transition={{
-              rotate: { duration: 3, repeat: Infinity, ease: "linear" },
+              rotate: reduceMotion ? { duration: 0 } : { duration: 3, repeat: Infinity, ease: "linear" },
               opacity: { duration: 0.5 },
             }}
             className="absolute rounded-full border-2 border-dashed pointer-events-none"
@@ -113,14 +115,14 @@ export default function HomePage() {
               height: "380px",
               borderColor: "rgba(249,115,22,0.5)",
               boxShadow: "0 0 30px rgba(249,115,22,0.3)",
-              x: dashedX,
-              y: dashedY,
+              x: reduceMotion ? -190 : dashedX,
+              y: reduceMotion ? -190 : dashedY,
             }}
           />
         )}
 
         {/* Power button with progress ring */}
-        <PowerButtonWithProgress size="large" />
+        <PowerButtonWithProgress size="large" poll={false} />
       </div>
 
       {/* Animated caption */}
@@ -139,7 +141,9 @@ export default function HomePage() {
             : undefined
         }
       >
-        {(isIrisActive ? "Iris s'éveille..." : "Iris est en sommeil")
+        {reduceMotion ? (
+          isIrisActive ? "Iris s'éveille..." : "Iris est en sommeil"
+        ) : (isIrisActive ? "Iris s'éveille..." : "Iris est en sommeil")
           .split("")
           .map((char, i) => (
             <motion.span

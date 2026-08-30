@@ -16,9 +16,9 @@ const SIZE_CONFIG: Record<Size, { button: number; svg: number; radius: number; s
 // The gauge isn't a closed loop — it leaves a small rounded gap centered at the bottom.
 const GAP_DEGREES = 46;
 
-export function PowerButtonWithProgress({ size = "large" }: { size?: Size }) {
+export function PowerButtonWithProgress({ size = "large", poll = true }: { size?: Size; poll?: boolean }) {
   const [location, navigate] = useLocation();
-  const { data: state } = useProcessingState();
+  const { data: state } = useProcessingState(poll);
   const toggle = useToggleProcessing();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

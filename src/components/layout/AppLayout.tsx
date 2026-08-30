@@ -10,6 +10,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TourOverlay } from "@/components/TourOverlay";
 import { useAuth } from "@/context/AuthContext";
@@ -29,18 +30,19 @@ const navItems: NavItem[] = [
 
 
 function AnimatedHamburger({ collapsed }: { collapsed: boolean }) {
+  const { reduceMotion } = useAccessibility();
   return (
     <div className="flex flex-col gap-[4px] w-[18px]">
       {[0, 0.13, 0.26].map((delay, i) => (
         <motion.span
           key={i}
           animate={
-            collapsed
+            collapsed && !reduceMotion
               ? { x: [0, 4, -4, 0], opacity: [0.6, 1, 1, 0.6] }
               : { x: 0, opacity: 0.7 }
           }
           transition={
-            collapsed
+            collapsed && !reduceMotion
               ? { duration: 1.0, repeat: Infinity, repeatDelay: 2.5, delay, ease: "easeInOut" }
               : { duration: 0.2 }
           }
@@ -52,6 +54,7 @@ function AnimatedHamburger({ collapsed }: { collapsed: boolean }) {
 }
 
 function AnimatedEnvelope({ sidebarOpen }: { sidebarOpen: boolean }) {
+  const { reduceMotion } = useAccessibility();
   return (
     <svg
       viewBox="0 0 18 18"
@@ -66,7 +69,7 @@ function AnimatedEnvelope({ sidebarOpen }: { sidebarOpen: boolean }) {
       <rect x="1" y="6" width="16" height="10" rx="1.5" />
       <motion.path
         animate={
-          sidebarOpen
+          sidebarOpen && !reduceMotion
             ? {
                 d: [
                   "M1 6 L9 11.5 L17 6",
@@ -78,7 +81,7 @@ function AnimatedEnvelope({ sidebarOpen }: { sidebarOpen: boolean }) {
             : { d: "M1 6 L9 11.5 L17 6" }
         }
         transition={
-          sidebarOpen
+          sidebarOpen && !reduceMotion
             ? {
                 duration: 1.0,
                 repeat: Infinity,
@@ -106,6 +109,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { reduceMotion } = useAccessibility();
 
   const handleToggle = () => {
     const expanding = sidebarCollapsed;
@@ -126,6 +130,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex flex-col items-center pt-4 pb-2 gap-3">
           <button
             onClick={handleToggle}
+            aria-label={sidebarCollapsed ? "Déployer le menu" : "Réduire le menu"}
+            aria-expanded={!sidebarCollapsed}
             className="p-2 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
           >
             <AnimatedHamburger collapsed={sidebarCollapsed} />
@@ -224,7 +230,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <motion.span
               className="shrink-0"
               animate={
-                sidebarCollapsed
+                sidebarCollapsed && !reduceMotion
                   ? {
                       filter: [
                         "drop-shadow(0 0 0px rgba(249,115,22,0))",
@@ -236,7 +242,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   : { filter: "drop-shadow(0 0 0px rgba(249,115,22,0))" }
               }
               transition={
-                sidebarCollapsed
+                sidebarCollapsed && !reduceMotion
                   ? { duration: 1.6, repeat: Infinity, repeatDelay: 3.5, ease: "easeInOut" }
                   : { duration: 0.3 }
               }
@@ -269,14 +275,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
           >
             <motion.span
               className="shrink-0"
-              animate={{ rotate: [0, 0, 360, 360] }}
-              transition={{
-                duration: 1.4,
-                repeat: Infinity,
-                repeatDelay: 5,
-                times: [0, 0.05, 0.95, 1],
-                ease: "easeInOut",
-              }}
+              animate={reduceMotion ? { rotate: 0 } : { rotate: [0, 0, 360, 360] }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : {
+                      duration: 1.4,
+                      repeat: Infinity,
+                      repeatDelay: 5,
+                      times: [0, 0.05, 0.95, 1],
+                      ease: "easeInOut",
+                    }
+              }
             >
               <Settings size={18} />
             </motion.span>
