@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
@@ -42,3 +43,16 @@ jobs:
           message: "Auto-tag: ${{ steps.new_version.outputs.new_version }}"
           force_push_tag: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger the Release workflow for the new tag
+        # A tag pushed using the default GITHUB_TOKEN does NOT fire other
+        # workflows' `push: tags` triggers — GitHub blocks this on purpose to
+        # prevent recursive workflow runs. This silently broke the auto-tag
+        # -> release chain the moment auto-tag.yml switched from a personal
+        # access token (GH_PAT) to GITHUB_TOKEN for the checkout step (fixing
+        # an unrelated auth issue) — every tag since v1.1.5 was created but
+        # never actually built/published. Explicitly dispatching release.yml
+        # via the API is exempt from that restriction and needs no PAT.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run release.yml --ref ${{ steps.new_version.outputs.new_version }}
