@@ -11,6 +11,7 @@ import { useEmailFeed } from "@/hooks/useEmailFeed";
 import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { useProcessingState } from "@/hooks/useProcessingState";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { apiFetch, API_BASE_URL } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import { PowerButtonWithProgress } from "@/components/PowerButtonWithProgress";
@@ -414,7 +415,7 @@ function EmailPanel({
     <div className="flex flex-col h-full border-l border-border/40 bg-card overflow-hidden">
       {/* Panel header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 flex-shrink-0">
-        <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+        <button onClick={onClose} aria-label="Retour à la liste" className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
           <ArrowLeft size={16} />
         </button>
         <div className="flex-1 min-w-0">
@@ -428,7 +429,7 @@ function EmailPanel({
             {providerLabel}
           </span>
         )}
-        <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
+        <button onClick={onClose} aria-label="Fermer le panneau" className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0">
           <X size={15} />
         </button>
       </div>
@@ -489,7 +490,12 @@ function EmailCard({
       onClick={onSelect}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onSelect()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
     >
       {isRead && (
         <span className="absolute top-2 right-2 text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide pointer-events-none">
@@ -1033,6 +1039,7 @@ export default function EmailsPage() {
 
   const { setEmailCount } = useAuth();
   const { data: processingState } = useProcessingState();
+  const { reduceMotion } = useAccessibility();
   const isIrisActive = processingState?.is_active ?? false;
 
   // Flash a tab pill whenever its category's "done" count increases (RDV confirm,
@@ -1245,15 +1252,15 @@ export default function EmailsPage() {
         <PowerButtonWithProgress size="small" poll={false} />
       </div>
       {statusMsg && (
-        <div className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+        <div role="status" aria-live="polite" className={`mx-6 mb-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between ${statusMsg.ok ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
           <span>{statusMsg.text}</span>
-          <button onClick={() => setStatusMsg(null)} className="opacity-60 hover:opacity-100 transition-opacity ml-2"><X size={13}/></button>
+          <button onClick={() => setStatusMsg(null)} aria-label="Fermer le message" className="opacity-60 hover:opacity-100 transition-opacity ml-2 p-2 -m-2"><X size={13}/></button>
         </div>
       )}
       <div data-tour="email-tabs" className="flex px-6 flex-shrink-0 border-b" style={{ borderColor: "hsl(var(--border))" }}>
         {TABS.map((t) => {
           const catProgress = processingState?.processed_by_category?.[t.id] ?? { total: 0, done: 0 };
-          const pulsing = pulsingTabs.has(t.id);
+          const pulsing = pulsingTabs.has(t.id) && !reduceMotion;
           return (
             <motion.button
               key={t.id}
@@ -1334,7 +1341,7 @@ export default function EmailsPage() {
 
             {/* Empty state for tab */}
             {anyConnected && !isLoading && tabCounts[activeTab] > 0 && displayEmails.length === 0 && (
-              <div className="text-center py-10 text-muted-foreground/40 text-sm">Aucun email dans cette catégorie.</div>
+              <div className="text-center py-10 text-muted-foreground/70 text-sm">Aucun email dans cette catégorie.</div>
             )}
             {anyConnected && !isLoading && (countsData?.total ?? 0) === 0 && !error && (
               <div className="text-center py-14 text-muted-foreground text-sm">Aucun email trouvé.</div>
@@ -1368,7 +1375,7 @@ export default function EmailsPage() {
 
             {/* End of list per tab */}
             {!categoryData?.has_more && displayEmails.length > 0 && (
-              <p className="text-center text-xs text-muted-foreground/30 py-3">
+              <p className="text-center text-xs text-muted-foreground/60 py-3">
                 — Tous les emails de cette catégorie sont chargés —
               </p>
             )}

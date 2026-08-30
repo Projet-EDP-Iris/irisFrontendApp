@@ -137,6 +137,14 @@ export function TourOverlay({ onClose }: { onClose: () => void }) {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [, navigate] = useLocation();
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const measureStep = useCallback((idx: number) => {
     const s = STEPS[idx];
     if (!s) return;
@@ -192,7 +200,8 @@ export function TourOverlay({ onClose }: { onClose: () => void }) {
               <p className="text-sm font-semibold text-foreground leading-snug">{current.title}</p>
               <button
                 onClick={onClose}
-                className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors -mt-0.5"
+                aria-label="Fermer le tutoriel"
+                className="shrink-0 w-8 h-8 -m-1.5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X size={12} />
               </button>

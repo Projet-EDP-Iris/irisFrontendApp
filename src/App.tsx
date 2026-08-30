@@ -22,6 +22,7 @@ import AnalysisPage from "@/pages/analysis";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { AccessibilityProvider } from "@/context/AccessibilityContext";
 
 
 function useNormalizedHashLocation() {
@@ -89,12 +90,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <WouterRouter hook={useNormalizedHashLocation}>
-            <AuthProvider>
-              <Router />
-            </AuthProvider>
-          </WouterRouter>
-          <Toaster />
+          <AccessibilityProvider>
+            <WouterRouter hook={useNormalizedHashLocation}>
+              <AuthProvider>
+                <Router />
+              </AuthProvider>
+            </WouterRouter>
+            <Toaster />
+          </AccessibilityProvider>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>

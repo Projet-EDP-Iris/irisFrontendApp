@@ -22,7 +22,15 @@ export function EmailsProgressBar({ poll = true }: { poll?: boolean } = {}) {
           {`${done}/${total} · ${percent}%`}
         </span>
       </div>
-      <div className="h-1 w-full rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.2)" }}>
+      <div
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${done} sur ${total} emails traités au total`}
+        className="h-1 w-full rounded-full overflow-hidden"
+        style={{ background: "rgba(0,0,0,0.2)" }}
+      >
         <div
           className="h-full rounded-full"
           style={{
