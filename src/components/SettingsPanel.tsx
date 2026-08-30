@@ -1,6 +1,7 @@
 import { X, Mail, Calendar, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useAccessibility } from "@/context/AccessibilityContext";
 import { getProfileIconById, PROFILE_ICON_OPTIONS } from "@/constants/profileIcons";
 import {
   isDesktopNotificationsEnabled,
@@ -35,6 +36,7 @@ function Toggle({ enabled, onClick, disabled = false }: { enabled: boolean; onCl
 
 export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
+  const { reduceMotion, setReduceMotion } = useAccessibility();
   const { connected: gmailConnected, gmailEmail, disconnecting: gmailDisconnecting, disconnect: disconnectGmail } = useGmailConnection();
   const { connected: outlookConnected, outlookEmail } = useOutlookConnection();
   const { connected: appleConnected, appleEmail, disconnecting: appleDisconnecting, disconnect: disconnectApple } = useAppleCalendarConnection();
@@ -415,6 +417,26 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
                   </div>
                   <Toggle enabled={soundAlerts} onClick={handleSoundAlertsToggle} />
                 </div>
+              </div>
+            </div>
+
+            {/* Accessibility */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs">♿</span>
+                <span className="text-sm font-medium text-foreground">Accessibilité</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-foreground">Réduire les animations</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Désactive les animations continues (anneau, ripples, pulses) dans l'app
+                  </div>
+                </div>
+                <Toggle
+                  enabled={reduceMotion}
+                  onClick={() => setReduceMotion(!reduceMotion)}
+                />
               </div>
             </div>
 

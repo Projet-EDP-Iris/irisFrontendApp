@@ -10,7 +10,15 @@ export function CategoryProgressBar({
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
   return (
-    <div className="h-1 w-full rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.2)" }}>
+    <div
+      role="progressbar"
+      aria-valuenow={percent}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={`${done} sur ${total} emails traités dans cette catégorie`}
+      className="h-1 w-full rounded-full overflow-hidden"
+      style={{ background: "rgba(0,0,0,0.2)" }}
+    >
       <div
         className="h-full rounded-full"
         style={{

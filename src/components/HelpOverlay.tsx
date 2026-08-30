@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { X } from "lucide-react";
 
 interface HelpItem {
@@ -67,6 +68,14 @@ const EMAIL_ITEMS: HelpItem[] = [
 ];
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center"
@@ -88,7 +97,8 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            aria-label="Fermer l'aide"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
           >
             <X size={15} />
           </button>
