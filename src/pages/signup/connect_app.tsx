@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, openExternalUrl } from "@/lib/api";
 import { getSignupDraft } from "@/lib/signupDraft";
 import emailOverloadVisual from "@/assets/email-overload-visual.svg";
 import { APP_VERSION } from "@/lib/version";
@@ -79,11 +79,10 @@ export default function IrisConnectApps() {
 
     try {
       const data = await apiFetch<{ auth_url: string }>(authPath);
-      // Redirect the whole browser to the OAuth consent page.
       // After granting access, the provider redirects to our callback which
       // then bounces back to the frontend /emails page with ?gmail=connected
       // (or ?outlook=success), where the existing callback handler takes over.
-      window.location.href = data.auth_url;
+      openExternalUrl(data.auth_url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de démarrer la connexion. Réessayez.");
       setConnectingApp(null);
