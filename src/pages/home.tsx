@@ -122,7 +122,7 @@ export default function HomePage() {
         )}
 
         {/* Power button with progress ring */}
-        <PowerButtonWithProgress size="large" poll={false} />
+        <PowerButtonWithProgress size="large" poll={true} />
       </div>
 
       {/* Animated caption */}

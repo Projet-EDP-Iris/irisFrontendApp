@@ -29,6 +29,25 @@ function normalizeApiError(errorPayload: unknown): string {
   return "Request failed";
 }
 
+/**
+ * Open an external URL (e.g. an OAuth consent page) from the renderer.
+ *
+ * In the packaged Electron app, top-level navigation to any URL outside the
+ * app's own bundle is blocked by the main process's will-navigate guard, so
+ * `window.location.href = url` silently does nothing. The preload bridge's
+ * `openExternal` routes the request through the main process's
+ * `shell.openExternal` instead, which actually opens the OS browser. Falls
+ * back to plain navigation when running outside Electron (e.g. the web dev
+ * server), where no such block exists.
+ */
+export function openExternalUrl(url: string): void {
+  if (window.irisDesktop?.openExternal) {
+    window.irisDesktop.openExternal(url);
+  } else {
+    window.location.href = url;
+  }
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {}

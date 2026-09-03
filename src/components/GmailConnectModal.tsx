@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Mail, ShieldCheck, Eye } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, openExternalUrl } from "@/lib/api";
 
 interface GmailConnectModalProps {
   onClose: () => void;
@@ -15,7 +15,7 @@ export function GmailConnectModal({ onClose }: GmailConnectModalProps) {
     setError(null);
     try {
       const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google");
-      window.location.href = auth_url;
+      openExternalUrl(auth_url);
     } catch {
       setError("Could not start the connection. Make sure the backend is running.");
       setLoading(false);
