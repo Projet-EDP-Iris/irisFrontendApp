@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { playDotsClick } from "@/lib/sounds";
 import {
   Mail, Calendar, CheckCircle2, Plug, Clock, Tag,
-  X, ArrowLeft, FileText, MessageSquare, ListChecks, RotateCcw,
+  X, ArrowLeft, FileText, MessageSquare, ListChecks, RotateCcw, ChevronRight,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
@@ -568,6 +568,13 @@ function QuickAction({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const actionsScrollRef = useRef<HTMLDivElement>(null);
+  const [hasMoreActions, setHasMoreActions] = useState(false);
+  const checkActionsOverflow = useCallback(() => {
+    const el = actionsScrollRef.current;
+    if (!el) return;
+    setHasMoreActions(el.scrollWidth - el.clientWidth - el.scrollLeft > 4);
+  }, []);
   // Seeded from server data (see issue #99) so "Fait ✓"/"RDV ajouté" correctly show
   // right after remount (logout/login, app restart) instead of always starting blank.
   // Excludes "info": its is_done means "read", not a UI-terminal action — seeding it
@@ -708,6 +715,18 @@ function QuickAction({
   useEffect(() => {
     if ((done || confirmed) && !manuallyClosed.current) setOpen(true);
   }, [done, confirmed]);
+
+  // Recompute the "more actions" scroll hint once the reveal animation
+  // finishes (checking earlier would measure the row mid-transition) and
+  // reset it when the row closes.
+  useEffect(() => {
+    if (!open) {
+      setHasMoreActions(false);
+      return;
+    }
+    const id = setTimeout(checkActionsOverflow, 320);
+    return () => clearTimeout(id);
+  }, [open, checkActionsOverflow]);
 
   function renderContent() {
     const resortBtn = (
@@ -1003,12 +1022,22 @@ function QuickAction({
 
       {/* Action content — slides in horizontally to the right */}
       <div
-        className="overflow-hidden transition-all duration-300 ease-out"
+        className="relative overflow-hidden transition-all duration-300 ease-out"
         style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
+        onTransitionEnd={checkActionsOverflow}
       >
-        <div className="flex items-center flex-nowrap overflow-x-auto [&>*]:shrink-0">
+        <div
+          ref={actionsScrollRef}
+          onScroll={checkActionsOverflow}
+          className="flex items-center flex-nowrap overflow-x-auto [&>*]:shrink-0"
+        >
           {renderContent()}
         </div>
+        {hasMoreActions && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pl-4 bg-gradient-to-l from-card via-card/80 to-transparent">
+            <ChevronRight size={13} className="text-muted-foreground animate-pulse" />
+          </div>
+        )}
       </div>
     </div>
   );
