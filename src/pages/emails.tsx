@@ -1006,7 +1006,7 @@ function QuickAction({
         className="overflow-hidden transition-all duration-300 ease-out"
         style={{ maxWidth: open ? "320px" : "0", opacity: open ? 1 : 0 }}
       >
-        <div className="flex items-center">
+        <div className="flex items-center flex-nowrap overflow-x-auto [&>*]:shrink-0">
           {renderContent()}
         </div>
       </div>
