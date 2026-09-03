@@ -38,7 +38,7 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
   const { user, updateProfile } = useAuth();
   const { reduceMotion, setReduceMotion } = useAccessibility();
   const { connected: gmailConnected, gmailEmail, disconnecting: gmailDisconnecting, disconnect: disconnectGmail } = useGmailConnection();
-  const { connected: outlookConnected, outlookEmail } = useOutlookConnection();
+  const { connected: outlookConnected, outlookEmail, disconnecting: outlookDisconnecting, disconnect: disconnectOutlook } = useOutlookConnection();
   const { connected: appleConnected, appleEmail, disconnecting: appleDisconnecting, disconnect: disconnectApple } = useAppleCalendarConnection();
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showAppleModal, setShowAppleModal] = useState(false);
@@ -324,9 +324,13 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
                       </div>
                     </div>
                     {outlookConnected ? (
-                      <span className="text-[10px] flex-shrink-0 px-2 py-1 rounded-lg border text-primary border-primary/30 bg-primary/5">
-                        Actif
-                      </span>
+                      <button
+                        onClick={() => void disconnectOutlook()}
+                        disabled={outlookDisconnecting}
+                        className="text-[10px] text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 flex-shrink-0 border border-border/60 rounded-lg px-2 py-1"
+                      >
+                        {outlookDisconnecting ? "..." : "Déconnecter"}
+                      </button>
                     ) : (
                       <button
                         onClick={() => void handleConnectOutlook()}
