@@ -12,7 +12,7 @@ import { useGmailConnection } from "@/hooks/useGmailConnection";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { useProcessingState } from "@/hooks/useProcessingState";
 import { useAccessibility } from "@/context/AccessibilityContext";
-import { apiFetch, API_BASE_URL } from "@/lib/api";
+import { apiFetch, API_BASE_URL, openExternalUrl } from "@/lib/api";
 import { notifyGmailConnected } from "@/lib/desktopNotifications";
 import { PowerButtonWithProgress } from "@/components/PowerButtonWithProgress";
 import { CategoryProgressBar } from "@/components/CategoryProgressBar";
@@ -1085,7 +1085,7 @@ export default function EmailsPage() {
 
   // Per-category server-side query — each tab fetches its own emails independently.
   // The queryKey includes activeTab so React Query re-fetches automatically on tab switch.
-  const { data: categoryData, isLoading: categoryLoading } = useQuery({
+  const { data: categoryData, isLoading: categoryLoading, error: categoryError } = useQuery({
     queryKey: ["emails-by-category", activeTab],
     queryFn: () => apiFetch<{ emails: import("@/types/email").EmailItem[]; has_more: boolean }>(
       `/emails/cached?category=${activeTab}&limit=200`
@@ -1181,11 +1181,7 @@ export default function EmailsPage() {
     setConnectingGmail(true);
     try {
       const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/google");
-      if (window.irisDesktop?.openExternal) {
-        window.irisDesktop.openExternal(auth_url);
-      } else {
-        window.location.href = auth_url;
-      }
+      openExternalUrl(auth_url);
     }
     catch { setStatusMsg({ text: "Impossible de démarrer la connexion Gmail. Vérifiez la config backend.", ok: false }); setConnectingGmail(false); }
   }
@@ -1214,11 +1210,7 @@ export default function EmailsPage() {
     setConnectingOutlook(true);
     try {
       const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
-      if (window.irisDesktop?.openExternal) {
-        window.irisDesktop.openExternal(auth_url);
-      } else {
-        window.location.href = auth_url;
-      }
+      openExternalUrl(auth_url);
     }
     catch { setStatusMsg({ text: "Impossible de démarrer la connexion Outlook. Vérifiez la config backend.", ok: false }); setConnectingOutlook(false); }
   }
@@ -1337,7 +1329,11 @@ export default function EmailsPage() {
             )}
 
             {isSessionExpired && <div className="text-center py-14 text-red-400 text-sm">Session expirée. Reconnectez-vous.</div>}
-            {error && !noProviderConnected && emailErrorStatus !== 404 && <div className="text-center py-14 text-red-400 text-sm">Erreur de chargement. Réessayez.</div>}
+            {/* Keyed on the category query's own error, not the background feed-sync
+                poller's — that poller can fail independently while the emails actually
+                shown here (from /emails/cached) load fine, which used to show this
+                banner over a fully-loaded list. */}
+            {categoryError && !noProviderConnected && <div className="text-center py-14 text-red-400 text-sm">Erreur de chargement. Réessayez.</div>}
 
             {/* Empty state for tab */}
             {anyConnected && !isLoading && tabCounts[activeTab] > 0 && displayEmails.length === 0 && (

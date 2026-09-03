@@ -13,7 +13,7 @@ import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import { useAppleCalendarConnection } from "@/hooks/useAppleCalendarConnection";
 import { GmailConnectModal } from "@/components/GmailConnectModal";
 import { AppleCalendarConnectModal } from "@/components/AppleCalendarConnectModal";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, openExternalUrl } from "@/lib/api";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -48,12 +48,8 @@ export function SettingsPanel({ onClose, onOpenHelp }: SettingsPanelProps) {
     setConnectingOutlook(true);
     try {
       const { auth_url } = await apiFetch<{ auth_url: string }>("/auth/microsoft");
-      if (window.irisDesktop?.openExternal) {
-        window.irisDesktop.openExternal(auth_url);
-        setConnectingOutlook(false);
-      } else {
-        window.location.href = auth_url;
-      }
+      openExternalUrl(auth_url);
+      setConnectingOutlook(false);
     } catch {
       setConnectingOutlook(false);
     }

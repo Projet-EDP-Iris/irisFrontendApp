@@ -12,7 +12,9 @@ export default function GoodbyePage() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    const timeout = setTimeout(() => navigate("/"), EXIT_HOLD_MS);
+    // Go straight to /login, not "/" — the root route is the cold-start
+    // video splash (loader.tsx), which shouldn't replay right after logout.
+    const timeout = setTimeout(() => navigate("/login"), EXIT_HOLD_MS);
     return () => clearTimeout(timeout);
   }, [navigate]);
 

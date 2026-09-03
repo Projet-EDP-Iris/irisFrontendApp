@@ -16,8 +16,12 @@ export function useToggleProcessing() {
   const queryClient = useQueryClient();
   return useMutation<ProcessingState, Error, void>({
     mutationFn: () => apiFetch<ProcessingState>("/processing-state/toggle", { method: "POST" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["processing-state"] });
+    onSuccess: (data) => {
+      // The toggle endpoint already returns the fresh flipped state, so write
+      // it straight into the cache instead of invalidating and waiting on a
+      // refetch — the backend flip isn't idempotent, so a second click landing
+      // before that refetch resolves would otherwise flip it right back.
+      queryClient.setQueryData(["processing-state"], data);
     },
   });
 }
