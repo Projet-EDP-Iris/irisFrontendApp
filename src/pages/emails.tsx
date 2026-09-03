@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { playDotsClick } from "@/lib/sounds";
 import {
   Mail, Calendar, CheckCircle2, Plug, Clock, Tag,
-  X, ArrowLeft, FileText, MessageSquare, ListChecks,
+  X, ArrowLeft, FileText, MessageSquare, ListChecks, RotateCcw,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
@@ -616,6 +616,22 @@ function QuickAction({
     setDone(true);
   }
 
+  const [resorting, setResorting] = useState(false);
+
+  async function handleResort() {
+    if (!email.db_id) return;
+    setResorting(true);
+    try {
+      await apiFetch(`/emails/${email.db_id}/resort`, { method: "POST" });
+      void queryClient.invalidateQueries({ queryKey: ["emails-by-category"] });
+      void queryClient.invalidateQueries({ queryKey: ["emails-counts"] });
+    } catch {
+      // Leave the button visible so the user can retry, same as handleMarkDone.
+    } finally {
+      setResorting(false);
+    }
+  }
+
   async function handleCreateReminder() {
     if (!email.db_id) {
       setReminderFeedback({ type: "error", text: "Ce rappel ne peut pas encore être créé." });
@@ -694,6 +710,20 @@ function QuickAction({
   }, [done, confirmed]);
 
   function renderContent() {
+    const resortBtn = (
+      <button
+        onClick={() => void handleResort()}
+        disabled={resorting || !email.db_id}
+        title="Mal trié ? Demander à Iris de re-trier cet email"
+        className="flex items-center gap-1 text-xs font-semibold border border-border bg-card text-foreground px-2.5 py-1.5 rounded-lg hover:bg-accent active:scale-[0.98] disabled:opacity-60 transition-all whitespace-nowrap"
+      >
+        {resorting
+          ? <span className="w-3 h-3 border border-foreground/30 border-t-foreground/80 rounded-full animate-spin" />
+          : <RotateCcw size={11}/>}
+        <span>Mal trié</span>
+      </button>
+    );
+
     if (confirmed) {
       const dateLabel = confirmedSlot
         ? new Date(confirmedSlot.start_time).toLocaleString("fr-FR", {
@@ -818,6 +848,7 @@ function QuickAction({
             ))}
             {rdvSummarizeBtn}
             {rdvReplyBtn}
+            {resortBtn}
           </div>
         );
       }
@@ -835,6 +866,7 @@ function QuickAction({
           </button>
           {rdvSummarizeBtn}
           {rdvReplyBtn}
+          {resortBtn}
         </div>
       );
     }
@@ -884,6 +916,7 @@ function QuickAction({
         </button>
         {summarizeBtn}
         {replyBtn}
+        {resortBtn}
       </div>
     );
     if (category === "attente") return (
@@ -900,6 +933,7 @@ function QuickAction({
         {reminderFeedback && <span className={`text-xs font-medium ${reminderFeedback.type === "success" ? "text-green-500" : "text-destructive"}`} role="status">{reminderFeedback.text}</span>}
         {summarizeBtn}
         {replyBtn}
+        {resortBtn}
       </div>
     );
     if (category === "bonsplans") {
@@ -926,6 +960,7 @@ function QuickAction({
             )
           )}
           {summarizeBtn}
+          {resortBtn}
         </div>
       );
     }
@@ -933,6 +968,7 @@ function QuickAction({
     return (
       <div className="flex items-center gap-1.5">
         {summarizeBtn}
+        {resortBtn}
       </div>
     );
   }
