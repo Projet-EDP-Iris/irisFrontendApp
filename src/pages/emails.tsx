@@ -1133,10 +1133,10 @@ export default function EmailsPage() {
     return () => clearTimeout(timer);
   }, [processingState?.processed_by_category]);
 
-  const { connected: gmailConnected, enabled: gmailEnabled, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
+  const { connected: gmailConnected, isLoading: gmailStatusLoading, error: gmailStatusError, refetchStatus: refetchGmail } = useGmailConnection();
   const { connected: outlookConnected, isLoading: outlookStatusLoading, refetchStatus: refetchOutlook } = useOutlookConnection();
 
-  const anyConnected = (gmailEnabled && gmailConnected) || outlookConnected;
+  const anyConnected = gmailConnected || outlookConnected;
 
   const {
     data: feedData,
@@ -1374,14 +1374,6 @@ export default function EmailsPage() {
                     <MicrosoftIcon/>{connectingOutlook ? "Redirection…" : "Connecter Outlook"}
                   </button>
                 </div>
-              </div>
-            )}
-
-            {/* Gmail disabled */}
-            {!noProviderConnected && !gmailEnabled && !outlookConnected && (
-              <div className="flex flex-col items-center py-14 gap-2 text-center">
-                <p className="text-muted-foreground text-sm">Gmail est désactivé.</p>
-                <p className="text-xs text-muted-foreground/50">Activez-le dans Paramètres → Services connectés.</p>
               </div>
             )}
 
