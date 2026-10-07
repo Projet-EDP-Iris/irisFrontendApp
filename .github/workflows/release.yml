@@ -68,7 +68,7 @@ jobs:
           ls -la release/ 2>/dev/null || echo "WARNING - release directory not found"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
